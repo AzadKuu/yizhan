@@ -9,6 +9,7 @@ import com.azadkuu.yizhan.service.ItemFilter;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.util.Msg;
+import com.azadkuu.yizhan.util.TimeUtil;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -186,20 +187,7 @@ public class GuiManager {
     }
 
     public String formatSeconds(int totalSeconds) {
-        int hours = totalSeconds / 3600;
-        int minutes = (totalSeconds % 3600) / 60;
-        int seconds = totalSeconds % 60;
-        StringBuilder sb = new StringBuilder();
-        if (hours > 0) {
-            sb.append(hours).append("时");
-        }
-        if (minutes > 0) {
-            sb.append(minutes).append("分");
-        }
-        if (seconds > 0 || sb.length() == 0) {
-            sb.append(seconds).append("秒");
-        }
-        return sb.toString();
+        return TimeUtil.formatSeconds(totalSeconds);
     }
 
     public ItemFilter getFilter() {

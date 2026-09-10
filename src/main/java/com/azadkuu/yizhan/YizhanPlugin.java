@@ -5,7 +5,9 @@ import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.gui.GuiManager;
 import com.azadkuu.yizhan.listener.InteractListener;
 import com.azadkuu.yizhan.listener.InventoryListener;
+import com.azadkuu.yizhan.listener.PlayerJoinListener;
 import com.azadkuu.yizhan.service.ItemFilter;
+import com.azadkuu.yizhan.service.NotificationService;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.MysqlStorage;
 import com.azadkuu.yizhan.storage.Storage;
@@ -19,6 +21,7 @@ public final class YizhanPlugin extends JavaPlugin {
     private Storage storage;
     private ItemFilter itemFilter;
     private TransportService transport;
+    private NotificationService notificationService;
     private GuiManager guiManager;
     private int deliveryTaskId = -1;
 
@@ -40,6 +43,7 @@ public final class YizhanPlugin extends JavaPlugin {
 
         this.itemFilter = new ItemFilter(config);
         this.transport = new TransportService(config, storage);
+        this.notificationService = new NotificationService(config, storage);
         this.guiManager = new GuiManager(config, storage, transport, itemFilter);
 
         YizhanCommand command = new YizhanCommand(this, config, storage, transport, guiManager);
@@ -51,11 +55,14 @@ public final class YizhanPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new InteractListener(config, storage, guiManager), this);
         getServer().getPluginManager().registerEvents(
-                new InventoryListener(this, config, storage, itemFilter, transport, guiManager), this);
+                new InventoryListener(this, config, storage, itemFilter, transport, notificationService, guiManager), this);
+        getServer().getPluginManager().registerEvents(
+                new PlayerJoinListener(this, notificationService), this);
 
         long interval = 20L * config.getPollIntervalSeconds();
         this.deliveryTaskId = getServer().getScheduler()
-                .runTaskTimerAsynchronously(this, new DeliveryTask(this, storage, guiManager, 64), interval, interval)
+                .runTaskTimerAsynchronously(this,
+                        new DeliveryTask(this, storage, guiManager, notificationService, 64), interval, interval)
                 .getTaskId();
 
         getLogger().info("Yizhan 已启用, server-id=" + config.getServerId()

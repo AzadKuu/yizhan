@@ -1,6 +1,7 @@
 package com.azadkuu.yizhan.storage;
 
 import com.azadkuu.yizhan.config.PluginConfig;
+import com.azadkuu.yizhan.model.Notification;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Shipment;
 import com.azadkuu.yizhan.model.ShipmentStatus;
@@ -125,6 +126,16 @@ public class MysqlStorage implements Storage {
                         + "slot INT NOT NULL,"
                         + "item_data LONGBLOB NOT NULL,"
                         + "PRIMARY KEY (station_id, slot)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "notifications ("
+                        + "id BIGINT NOT NULL AUTO_INCREMENT,"
+                        + "player_uuid VARCHAR(36) NOT NULL,"
+                        + "message TEXT NOT NULL,"
+                        + "created_at BIGINT NOT NULL,"
+                        + "delivered TINYINT NOT NULL DEFAULT 0,"
+                        + "PRIMARY KEY (id),"
+                        + "KEY idx_yz_notify (player_uuid, delivered)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         };
         try (Connection c = conn(); Statement st = c.createStatement()) {
@@ -749,6 +760,68 @@ public class MysqlStorage implements Storage {
             }
         } catch (SQLException ex) {
             throw new StorageException("saveStationItems failed", ex);
+        }
+    }
+
+    @Override
+    public void pushNotification(UUID player, String message) {
+        String sql = "INSERT INTO " + prefix + "notifications (player_uuid, message, created_at, delivered) VALUES (?,?,?,0)";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, player.toString());
+            ps.setString(2, message);
+            ps.setLong(3, System.currentTimeMillis());
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new StorageException("pushNotification failed", ex);
+        }
+    }
+
+    @Override
+    public List<Notification> claimNotifications(UUID player) {
+        List<Notification> out = new ArrayList<>();
+        try (Connection c = conn()) {
+            c.setAutoCommit(false);
+            try {
+                List<Long> ids = new ArrayList<>();
+                try (PreparedStatement ps = c.prepareStatement("SELECT id, message, created_at FROM " + prefix
+                        + "notifications WHERE player_uuid=? AND delivered=0 ORDER BY id LIMIT 200 FOR UPDATE")) {
+                    ps.setString(1, player.toString());
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            out.add(new Notification(rs.getLong(1), player, rs.getString(2), rs.getLong(3)));
+                            ids.add(rs.getLong(1));
+                        }
+                    }
+                }
+                if (!ids.isEmpty()) {
+                    StringBuilder sql = new StringBuilder("UPDATE " + prefix + "notifications SET delivered=1 WHERE id IN (");
+                    for (int i = 0; i < ids.size(); i++) {
+                        if (i > 0) {
+                            sql.append(',');
+                        }
+                        sql.append('?');
+                    }
+                    sql.append(')');
+                    try (PreparedStatement ps = c.prepareStatement(sql.toString())) {
+                        for (int i = 0; i < ids.size(); i++) {
+                            ps.setLong(i + 1, ids.get(i));
+                        }
+                        ps.executeUpdate();
+                    }
+                }
+                c.commit();
+                return out;
+            } catch (SQLException ex) {
+                c.rollback();
+                throw ex;
+            } finally {
+                try {
+                    c.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("claimNotifications failed", ex);
         }
     }
 }

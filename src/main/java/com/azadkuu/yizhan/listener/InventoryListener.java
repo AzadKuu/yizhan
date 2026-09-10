@@ -6,6 +6,7 @@ import com.azadkuu.yizhan.gui.GuiManager;
 import com.azadkuu.yizhan.gui.StationHolder;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.service.ItemFilter;
+import com.azadkuu.yizhan.service.NotificationService;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.util.Msg;
@@ -31,15 +32,17 @@ public class InventoryListener implements Listener {
     private final Storage storage;
     private final ItemFilter filter;
     private final TransportService transport;
+    private final NotificationService notificationService;
     private final GuiManager guiManager;
 
     public InventoryListener(YizhanPlugin plugin, PluginConfig config, Storage storage, ItemFilter filter,
-                             TransportService transport, GuiManager guiManager) {
+                             TransportService transport, NotificationService notificationService, GuiManager guiManager) {
         this.plugin = plugin;
         this.config = config;
         this.storage = storage;
         this.filter = filter;
         this.transport = transport;
+        this.notificationService = notificationService;
         this.guiManager = guiManager;
     }
 
@@ -243,8 +246,7 @@ public class InventoryListener implements Listener {
         }
         player.closeInventory();
         int buffer = transport.resolveBufferSeconds(route, holder.getStation());
-        Msg.send(player, config.getPrefix(), "&a发货成功 &7#" + shipmentId + " &7目的地 &f" + route.getToStation()
-                + " &7预计 &f" + guiManager.formatSeconds(buffer) + "&7后到达");
+        Msg.send(player, config.getPrefix(), notificationService.shipStart(shipmentId, route.getToStation(), buffer));
     }
 
     private void claimAll(Player player, StationHolder holder) {

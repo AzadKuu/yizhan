@@ -17,6 +17,8 @@ public class PluginConfig {
     private int defaultStationSize;
     private int maxStationSize;
     private String prefix;
+    private String shipStartMessage;
+    private String shipArrivedMessage;
 
     private String dbHost;
     private int dbPort;
@@ -40,6 +42,10 @@ public class PluginConfig {
         this.defaultStationSize = clampSize(cfg.getInt("default-station-size", 27));
         this.maxStationSize = clampSize(cfg.getInt("max-station-size", 45));
         this.prefix = cfg.getString("language.prefix", "&8[&6驿站&8] &r");
+        this.shipStartMessage = cfg.getString("messages.ship-start",
+                "&a发货成功 &7#%id% &7目的地 &f%to% &7预计 &f%buffer%&7后到达");
+        this.shipArrivedMessage = cfg.getString("messages.ship-arrived",
+                "&a你的包裹 &7#%id% &a已到达 &f%station% &a，请前往领取");
 
         this.dbHost = cfg.getString("database.host", "127.0.0.1");
         this.dbPort = cfg.getInt("database.port", 3306);
@@ -105,6 +111,14 @@ public class PluginConfig {
 
     public String getPrefix() {
         return prefix;
+    }
+
+    public String getShipStartMessage() {
+        return shipStartMessage;
+    }
+
+    public String getShipArrivedMessage() {
+        return shipArrivedMessage;
     }
 
     public String getDbHost() {

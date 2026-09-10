@@ -1,5 +1,6 @@
 package com.azadkuu.yizhan.storage;
 
+import com.azadkuu.yizhan.model.Notification;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Shipment;
 import com.azadkuu.yizhan.model.Station;
@@ -54,4 +55,8 @@ public interface Storage extends AutoCloseable {
     Map<Integer, ItemStack> loadStationItems(String stationId);
 
     int saveStationItems(String stationId, Map<Integer, ItemStack> items, int expectedVersion);
+
+    void pushNotification(UUID player, String message);
+
+    List<Notification> claimNotifications(UUID player);
 }

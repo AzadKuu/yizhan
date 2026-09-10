@@ -6,6 +6,9 @@ default-station-size: 27
 max-station-size: 45
 language:
   prefix: "&8[&6驿站&8] &r"
+messages:
+  ship-start: "&a发货成功 &7#%id% &7目的地 &f%to% &7预计 &f%buffer%&7后到达"
+  ship-arrived: "&a你的包裹 &7#%id% &a已到达 &f%station% &a，请前往领取"
 database:
   host: "127.0.0.1"
   port: 3306
