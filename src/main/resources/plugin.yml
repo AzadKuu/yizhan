@@ -1,0 +1,24 @@
+name: Yizhan
+version: '${project.version}'
+main: com.azadkuu.yizhan.YizhanPlugin
+api-version: '1.21'
+authors: [AZADKUU]
+description: Cross-server item transport relay for Paper
+commands:
+  yizhan:
+    description: Yizhan main command
+    usage: /yizhan help
+    aliases: [yz, yizhanstation]
+permissions:
+  yizhan.bind:
+    description: Bind or unbind stations
+    default: op
+  yizhan.route:
+    description: Manage routes and buffer time
+    default: op
+  yizhan.open:
+    description: Open station containers
+    default: true
+  yizhan.admin:
+    description: Reload and administrative actions
+    default: op

@@ -1,0 +1,25 @@
+server-id: "survival-1"
+poll-interval-seconds: 3
+default-buffer-seconds: 300
+allow-cancel-shipment: false
+default-station-size: 27
+max-station-size: 45
+language:
+  prefix: "&8[&6驿站&8] &r"
+database:
+  host: "127.0.0.1"
+  port: 3306
+  database: "yizhan"
+  user: "root"
+  password: "change_me"
+  table-prefix: "yz_"
+  pool-size: 6
+  use-ssl: false
+  connection-timeout-ms: 10000
+item-filter:
+  blocked-namespaces:
+    - "nexo"
+    - "itemsadder"
+    - "ia"
+  blocked-keys: []
+  block-custom-model-data: false
