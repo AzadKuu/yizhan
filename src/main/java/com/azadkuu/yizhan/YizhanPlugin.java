@@ -41,12 +41,12 @@ public final class YizhanPlugin extends JavaPlugin {
             return;
         }
 
-        this.itemFilter = new ItemFilter(config);
+        this.itemFilter = new ItemFilter(config, msg -> getLogger().info("[debug] " + msg));
         this.transport = new TransportService(config, storage);
         this.notificationService = new NotificationService(config, storage);
         this.guiManager = new GuiManager(config, storage, transport, itemFilter);
 
-        YizhanCommand command = new YizhanCommand(this, config, storage, transport, guiManager);
+        YizhanCommand command = new YizhanCommand(this, config, storage, transport, guiManager, itemFilter);
         PluginCommand pluginCommand = getCommand("yizhan");
         if (pluginCommand != null) {
             pluginCommand.setExecutor(command);
@@ -67,7 +67,9 @@ public final class YizhanPlugin extends JavaPlugin {
 
         getLogger().info("Yizhan 已启用, server-id=" + config.getServerId()
                 + ", 轮询间隔=" + config.getPollIntervalSeconds() + "s"
-                + ", 默认缓冲=" + config.getDefaultBufferSeconds() + "s");
+                + ", 默认缓冲=" + config.getDefaultBufferSeconds() + "s"
+                + ", debug=" + config.isDebug());
+        logItemFilter();
     }
 
     @Override
@@ -86,6 +88,14 @@ public final class YizhanPlugin extends JavaPlugin {
     public void reload() {
         reloadConfig();
         config.load(getConfig());
+        getLogger().info("配置已重载, debug=" + config.isDebug());
+        logItemFilter();
+    }
+
+    private void logItemFilter() {
+        getLogger().info("物品过滤配置: namespaces=" + config.getBlockedNamespaces()
+                + ", keys=" + config.getBlockedKeys()
+                + ", block-custom-model-data=" + config.isBlockCustomModelData());
     }
 
     public PluginConfig getPluginConfig() {

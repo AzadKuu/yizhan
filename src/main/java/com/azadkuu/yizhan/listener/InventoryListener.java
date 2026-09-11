@@ -89,7 +89,7 @@ public class InventoryListener implements Listener {
         ItemStack incoming = resolveIncoming(event, guiSize);
         if (incoming != null && filter.isBlocked(incoming)) {
             event.setCancelled(true);
-            Msg.send(player, config.getPrefix(), "&c物品 &f" + filter.describe(incoming) + " &c被识别为自定义物品，禁止运输");
+            sendItemBlocked(player, incoming, " &c被识别为自定义物品，禁止运输");
         }
     }
 
@@ -126,7 +126,7 @@ public class InventoryListener implements Listener {
         }
         if (filter.isBlocked(event.getOldCursor())) {
             event.setCancelled(true);
-            Msg.send((Player) event.getWhoClicked(), config.getPrefix(), "&c物品被识别为自定义物品，禁止运输");
+            sendItemBlocked((Player) event.getWhoClicked(), event.getOldCursor(), " &c被识别为自定义物品，禁止运输");
         }
     }
 
@@ -223,7 +223,11 @@ public class InventoryListener implements Listener {
                 continue;
             }
             if (filter.isBlocked(item)) {
-                Msg.send(player, config.getPrefix(), "&c发货区存在自定义物品 &f" + filter.describe(item) + "&c，已阻止发货");
+                player.sendMessage(Msg.join(
+                        Msg.component(config.getPrefix()),
+                        Msg.component("&c发货区存在自定义物品 "),
+                        filter.nameComponent(item),
+                        Msg.component(" &c，已阻止发货")));
                 return;
             }
             items.put(i, item.clone());
@@ -246,6 +250,10 @@ public class InventoryListener implements Listener {
         }
         player.closeInventory();
         int buffer = transport.resolveBufferSeconds(route, holder.getStation());
+        if (config.isDebug()) {
+            plugin.getLogger().info("[debug] 发货成功 #" + shipmentId + " " + holder.getStation().getId()
+                    + " -> " + route.getToStation() + " 物品组数=" + items.size() + " 缓冲=" + buffer + "s");
+        }
         Msg.send(player, config.getPrefix(), notificationService.shipStart(shipmentId, route.getToStation(), buffer));
     }
 
@@ -269,6 +277,14 @@ public class InventoryListener implements Listener {
             holder.setDirty(true);
             Msg.send(player, config.getPrefix(), "&a已领取 &f" + moved + " &a组物品");
         }
+    }
+
+    private void sendItemBlocked(Player player, ItemStack item, String suffix) {
+        player.sendMessage(Msg.join(
+                Msg.component(config.getPrefix()),
+                Msg.component("&c物品 "),
+                filter.nameComponent(item),
+                Msg.component(suffix)));
     }
 
     private void returnItems(Player player, StationHolder holder) {

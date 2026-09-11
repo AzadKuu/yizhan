@@ -1,4 +1,5 @@
 server-id: "survival-1"
+debug: false
 poll-interval-seconds: 3
 default-buffer-seconds: 300
 allow-cancel-shipment: false
@@ -25,4 +26,11 @@ item-filter:
     - "itemsadder"
     - "ia"
   blocked-keys: []
+  # 白名单：优先级高于黑名单，命中即放行。可精确到某个自定义物品。
+  # key 为 NBT/PDC 键，value 为对应值（用 /yz debugitem 查看物品的键值对）。
+  # 示例：
+  # allowed-items:
+  #   - key: "nexo:item_id"
+  #     value: "coin"
+  allowed-items: []
   block-custom-model-data: false

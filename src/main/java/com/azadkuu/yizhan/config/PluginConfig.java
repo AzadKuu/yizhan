@@ -6,11 +6,13 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 public class PluginConfig {
 
     private String serverId;
+    private boolean debug;
     private int pollIntervalSeconds;
     private int defaultBufferSeconds;
     private boolean allowCancelShipment;
@@ -32,10 +34,12 @@ public class PluginConfig {
 
     private final Set<String> blockedNamespaces = new HashSet<>();
     private final Set<String> blockedKeys = new HashSet<>();
+    private final List<AllowedItem> allowedItems = new ArrayList<>();
     private boolean blockCustomModelData;
 
     public void load(FileConfiguration cfg) {
         this.serverId = cfg.getString("server-id", "server-1");
+        this.debug = cfg.getBoolean("debug", false);
         this.pollIntervalSeconds = Math.max(1, cfg.getInt("poll-interval-seconds", 3));
         this.defaultBufferSeconds = Math.max(1, cfg.getInt("default-buffer-seconds", 300));
         this.allowCancelShipment = cfg.getBoolean("allow-cancel-shipment", false);
@@ -72,6 +76,22 @@ public class PluginConfig {
             }
         }
         this.blockCustomModelData = cfg.getBoolean("item-filter.block-custom-model-data", false);
+        allowedItems.clear();
+        for (Map<?, ?> entry : cfg.getMapList("item-filter.allowed-items")) {
+            if (entry == null) {
+                continue;
+            }
+            Object rawKey = entry.get("key");
+            Object rawValue = entry.get("value");
+            if (rawKey == null || rawValue == null) {
+                continue;
+            }
+            String key = String.valueOf(rawKey).trim().toLowerCase(Locale.ROOT);
+            if (key.isEmpty()) {
+                continue;
+            }
+            allowedItems.add(new AllowedItem(key, String.valueOf(rawValue)));
+        }
     }
 
     private int clampSize(int value) {
@@ -87,6 +107,10 @@ public class PluginConfig {
 
     public String getServerId() {
         return serverId;
+    }
+
+    public boolean isDebug() {
+        return debug;
     }
 
     public int getPollIntervalSeconds() {
@@ -169,9 +193,16 @@ public class PluginConfig {
         return blockCustomModelData;
     }
 
+    public List<AllowedItem> getAllowedItems() {
+        return allowedItems;
+    }
+
     public List<String> describeFilter() {
         List<String> out = new ArrayList<>(blockedNamespaces);
         out.addAll(blockedKeys);
         return out;
+    }
+
+    public record AllowedItem(String key, String value) {
     }
 }

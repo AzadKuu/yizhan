@@ -22,4 +22,18 @@ public final class Msg {
     public static void send(CommandSender sender, String prefix, String raw) {
         sender.sendMessage(component(prefix + raw));
     }
+
+    public static void send(CommandSender sender, Component component) {
+        sender.sendMessage(component);
+    }
+
+    public static Component join(Component... parts) {
+        Component result = Component.empty();
+        for (Component part : parts) {
+            if (part != null) {
+                result = result.append(part);
+            }
+        }
+        return result;
+    }
 }

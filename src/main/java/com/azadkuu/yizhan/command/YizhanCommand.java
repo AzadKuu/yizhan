@@ -6,39 +6,50 @@ import com.azadkuu.yizhan.gui.GuiManager;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Station;
 import com.azadkuu.yizhan.model.StationMode;
+import com.azadkuu.yizhan.service.ItemFilter;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.util.Msg;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUB_COMMANDS = Arrays.asList(
-            "bind", "unbind", "route", "buffer", "open", "list", "info", "reload", "help");
+            "bind", "unbind", "route", "buffer", "open", "list", "info", "reload", "debugitem", "debugpdc",
+            "help");
 
     private final YizhanPlugin plugin;
     private final PluginConfig config;
     private final Storage storage;
     private final TransportService transport;
     private final GuiManager guiManager;
+    private final ItemFilter itemFilter;
 
     public YizhanCommand(YizhanPlugin plugin, PluginConfig config, Storage storage, TransportService transport,
-                         GuiManager guiManager) {
+                         GuiManager guiManager, ItemFilter itemFilter) {
         this.plugin = plugin;
         this.config = config;
         this.storage = storage;
         this.transport = transport;
         this.guiManager = guiManager;
+        this.itemFilter = itemFilter;
     }
 
     @Override
@@ -55,6 +66,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "open" -> open(sender, args);
             case "list" -> list(sender);
             case "info" -> info(sender, args);
+            case "debugitem" -> debugItem(sender);
+            case "debugpdc" -> debugPdc(sender);
             case "reload" -> reload(sender);
             default -> help(sender);
         }
@@ -276,6 +289,99 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                 + " &7发送路由: &f" + routes + " &7版本: &f" + station.getVersion());
     }
 
+    @SuppressWarnings("deprecation")
+    private void debugItem(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            return;
+        }
+        if (!player.hasPermission("yizhan.admin")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        ItemStack item = player.getInventory().getItemInMainHand();
+        if (item == null || item.getType().isAir()) {
+            Msg.send(sender, config.getPrefix(), "&7主手没有物品");
+            return;
+        }
+        ItemMeta meta = item.getItemMeta();
+        Msg.send(sender, config.getPrefix(), "&6物品诊断 &8[&fdebug=" + config.isDebug() + "&8]");
+        Msg.send(sender, config.getPrefix(), "&7类型: &f" + item.getType().name());
+        String name = "(无)";
+        if (meta != null && meta.hasDisplayName()) {
+            Component display = meta.displayName();
+            if (display != null) {
+                name = PlainTextComponentSerializer.plainText().serialize(display);
+            }
+        }
+        Msg.send(sender, config.getPrefix(), "&7显示名: &f" + name);
+        Msg.send(sender, config.getPrefix(), "&7自定义模型数据: &f"
+                + (meta != null && meta.hasCustomModelData() ? String.valueOf(meta.getCustomModelData()) : "(无)"));
+        int pdcCount = 0;
+        if (meta != null) {
+            List<NamespacedKey> pdcKeys = new ArrayList<>(meta.getPersistentDataContainer().getKeys());
+            pdcCount = pdcKeys.size();
+            if (pdcKeys.isEmpty()) {
+                Msg.send(sender, config.getPrefix(), "&7PDC 键值: &8(无，原版物品或未使用 PDC)");
+            } else {
+                Msg.send(sender, config.getPrefix(), "&7PDC 键值 (&f" + pdcKeys.size() + "&7):");
+                for (NamespacedKey key : pdcKeys) {
+                    String value = meta.getPersistentDataContainer().get(key, PersistentDataType.STRING);
+                    Msg.send(sender, config.getPrefix(), "  &8- &f" + key + " &7= &f"
+                            + (value == null ? "(非字符串类型)" : "\"" + value + "\""));
+                }
+            }
+        }
+        Map<String, String> customData = itemFilter.parseCustomData(meta);
+        if (customData.isEmpty()) {
+            Msg.send(sender, config.getPrefix(), "&7custom_data 键值: &8(无)");
+        } else {
+            Msg.send(sender, config.getPrefix(), "&7custom_data 键值 (&f" + customData.size() + "&7):");
+            for (Map.Entry<String, String> entry : customData.entrySet()) {
+                Msg.send(sender, config.getPrefix(), "  &8- &f" + entry.getKey() + " &7= &f\""
+                        + entry.getValue() + "\"");
+            }
+        }
+        boolean blocked = itemFilter.isBlocked(item);
+        Msg.send(sender, config.getPrefix(), blocked
+                ? "&7判定结果: &c会被拦截，禁止运输"
+                : "&7判定结果: &a允许运输");
+        if (!blocked && pdcCount > 0) {
+            Msg.send(sender, config.getPrefix(), "&7提示: 该物品含 PDC 但未被拦截，"
+                    + "请把上方命名空间加入 &fitem-filter.blocked-namespaces");
+        }
+        Msg.send(sender, config.getPrefix(), "&7SNBT: &f" + (meta == null ? "(null)" : meta.getAsString()));
+    }
+
+    @SuppressWarnings("deprecation")
+    private void debugPdc(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            return;
+        }
+        if (!player.hasPermission("yizhan.admin")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        ItemStack item = player.getInventory().getItemInMainHand();
+        if (item == null || item.getType().isAir()) {
+            Msg.send(sender, config.getPrefix(), "&7主手没有物品");
+            return;
+        }
+        ItemStack copy = item.clone();
+        ItemMeta meta = copy.getItemMeta();
+        if (meta == null) {
+            Msg.send(sender, config.getPrefix(), "&c该物品没有 ItemMeta");
+            return;
+        }
+        NamespacedKey key = new NamespacedKey("nexo", "debug_key");
+        meta.getPersistentDataContainer().set(key, PersistentDataType.STRING, "test_value");
+        copy.setItemMeta(meta);
+        player.getInventory().setItemInMainHand(copy);
+        Msg.send(sender, config.getPrefix(), "&a已用 Bukkit API 写入 PDC 键 &f" + key);
+        Msg.send(sender, config.getPrefix(), "&7请执行 &f/data get entity @s SelectedItem &7查看 Paper 实际写出的 NBT 格式");
+    }
+
     private void reload(CommandSender sender) {
         if (!sender.hasPermission("yizhan.admin")) {
             Msg.send(sender, config.getPrefix(), "&c没有权限");
@@ -295,6 +401,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&f/yz open <名称> &7远程打开驿站");
         Msg.send(sender, config.getPrefix(), "&f/yz list &7列出所有驿站");
         Msg.send(sender, config.getPrefix(), "&f/yz info <名称> &7查看驿站详情");
+        Msg.send(sender, config.getPrefix(), "&f/yz debugitem &7诊断主手物品（PDC 键、SNBT 与拦截判定）");
+        Msg.send(sender, config.getPrefix(), "&f/yz debugpdc &7用 Bukkit API 给主手物品写测试 PDC 键");
         Msg.send(sender, config.getPrefix(), "&f/yz reload &7重载配置");
     }
 
