@@ -96,6 +96,7 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | `/yizhan open <名称>` | 远程打开驿站容器 |
 | `/yizhan list` | 列出所有驿站 |
 | `/yizhan info <名称>` | 查看驿站详情 |
+| `/yizhan debugitem` | 诊断主手物品：打印 PDC / `custom_data` 键值对、CustomModelData 与拦截判定（需 `yizhan.admin`） |
 | `/yizhan reload` | 重载配置文件 |
 
 驿站名称只允许字母、数字、下划线和短横线，长度 1-32。
@@ -113,6 +114,7 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 
 ```yaml
 server-id: "survival-1"          # 本子服标识，每个子服必须不同
+debug: false                     # 开启后输出拦截/发货等诊断日志到控制台
 poll-interval-seconds: 3         # 投递轮询间隔（秒）
 default-buffer-seconds: 300      # 默认缓冲时间（秒）
 allow-cancel-shipment: false     # 预留项，当前版本未在界面提供取消入口
@@ -139,6 +141,7 @@ item-filter:
     - "itemsadder"
     - "ia"
   blocked-keys: []               # 精确拦截，例如 "nexo:item_id"
+  allowed-items: []              # 白名单，优先级最高；按 key + value 精确放行，例如见下方
   block-custom-model-data: false # 是否额外拦截带 CustomModelData 的物品
 ```
 
@@ -154,12 +157,25 @@ item-filter:
 - key 的完整字符串命中 `blocked-keys` 时拦截
 - `block-custom-model-data: true` 且物品带 CustomModelData 时拦截
 
+**白名单优先**：`allowed-items` 中的条目**优先于以上全部黑名单规则**，命中即放行。每个条目由 `key` 和 `value` 组成，两者都相等（key 忽略大小写，value 区分大小写）才生效。它对 PersistentDataContainer 与 `custom_data` 两条匹配路径都适用：
+
+```yaml
+item-filter:
+  blocked-namespaces:
+    - "nexo"
+  allowed-items:
+    - key: "nexo:item_id"   # 黑名单会拦下所有 Nexo 物品
+      value: "coin"         # 但只放行这一个
+```
+
 拦截发生的时机有两处，双重校验：
 
 1. 物品放入发货区的瞬间
 2. 点击「发货」时的全量扫描
 
-默认放行，只有配置中列出的标记才会被拒绝。实际接入 Nexo 时，建议先放入一个 Nexo 物品，观察提示信息确认其命名空间后再完善配置。
+默认放行，只有配置中列出的标记才会被拒绝。
+
+**排查物品键值**：手持目标物品执行 `/yizhan debugitem`，会直接打印该物品的 PDC 键值对与 `custom_data` 键值对（形如 `nexo:item_id = "coin"`）、CustomModelData 和拦截判定。把命名空间补进 `blocked-namespaces` 即可拦截，或把 `key` / `value` 填进 `allowed-items` 精确豁免。开启 `debug: true` 后，拦截与发货事件也会写入控制台日志。
 
 ## 数据表
 
