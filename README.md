@@ -15,8 +15,8 @@ Paper 1.21.x 跨服物资运输插件。把物品从一个服务器的容器，�
 - **发货与到货通知**：发货和投递完成都会给操作玩家发消息；发件人不在线时消息入库，下次在任意子服上线自动补发
 - **玩家邮箱**：全服共用一个邮箱方块（管理员用 `/yizhan mailbox bind` 绑定），玩家右键即可打开自己独立的邮箱，物品按 UUID 存库，天然跨服
 - **跨服发奖**：`/yizhan mail send` / `/yizhan mail give` 可把物品直接投递到任意玩家（含离线、含其他子服）的邮箱
-- **每日奖励**：玩家每天首次登录时，自动把配置好的奖励投递到自己的邮箱
-- **快递费**：路由可配置快递费，发货界面有独立费用槽，放入带 `currency` 键的货币物品才能发货
+- **每日奖励**：玩家每天首次登录时，自动把奖励投递到自己的邮箱（原版材质 + 登记模板物品两种来源叠加）
+- **快递费**：路由可配置快递费，发货界面有独立费用槽，放入匹配 `currency-key`（可选 `currency-value`）的货币物品才能发货
 
 ## 环境要求
 
@@ -104,6 +104,10 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | `/yizhan mailbox <bind\|unbind\|info>` | 把准星方块绑定为全服邮箱方块（需 `yizhan.admin`） |
 | `/yizhan mail send <玩家> [数量]` | 把主手物品发到目标玩家邮箱，省略数量则发整组 |
 | `/yizhan mail give <玩家> <物品ID> <数量>` | 发送指定物品到目标玩家邮箱 |
+| `/yizhan dailyreward add` | 把主手物品登记为每日奖励模板（支持 Nexo 等自定义物品，需 `yizhan.admin`） |
+| `/yizhan dailyreward list` | 查看已登记的每日奖励模板 |
+| `/yizhan dailyreward remove <槽位>` | 移除某个登记的每日奖励模板 |
+| `/yizhan dailyreward clear` | 清空全部登记的每日奖励模板 |
 | `/yizhan debugitem` | 诊断主手物品：打印 PDC / `custom_data` 键值对、CustomModelData 与拦截判定（需 `yizhan.admin`） |
 | `/yizhan reload` | 重载配置文件 |
 
@@ -122,6 +126,15 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 
 投递到邮箱的途径有三种：`/yizhan mail send`、`/yizhan mail give`、每日奖励。
 
+## 每日奖励
+
+玩家每天首次登录时，自动把奖励投递到自己的邮箱（离线期间不补发）。奖励有两个来源，**会叠加发放**：
+
+1. **配置原版材质**：在 `daily-reward.items` 里按 `material` + `amount` 配，适合原版物品
+2. **登记模板物品**：管理员手持真实物品执行 `/yizhan dailyreward add`，插件把该物品完整序列化存库，每天照发一份。适合 Nexo / ItemsAdder 等自定义物品（无法用材质名描述）
+
+登记的模板物品存在 `yz_daily_rewards` 表，用 `/yizhan dailyreward list` 查看、`remove <槽位>` 删除、`clear` 清空。两个来源都为空时不发也不标记领取。
+
 ## 快递费
 
 快递费**按数量计费**，金额配置在路由上：
@@ -131,7 +144,13 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 /yizhan route station_a station_b 300 5  # 建路由时一并设置
 ```
 
-发货界面的**费用槽（底部左起第 2 格）**用于放货币物品。判定货币的方式：物品的 PDC / `custom_data` 键名等于 `ship-fee.currency-key`（默认 `currency`）即为货币，例如：
+发货界面的**费用槽（底部左起第 2 格）**用于放货币物品。判定货币的方式：
+
+- 物品的 PDC / `custom_data` 键名等于 `ship-fee.currency-key`（默认 `currency`）
+- 若 `ship-fee.currency-value` 留空，只要键名匹配即视为货币（任何带该键的物品都算）
+- 若 `ship-fee.currency-value` 填了值，则**键和值都必须匹配**才算货币
+
+Nexo 等插件常让多个物品共用同一个键、靠值区分（例如 `nexo:item_id` 键下分别是 `coin`、`gem`…），这种情况下 `currency-value` 必须填，否则会把所有同类物品都误判为货币。用 `/yizhan debugitem` 可查看手持货币物品的实际键值。例如：
 
 ```text
 /give @p minecraft:gold_nugget[minecraft:custom_data={currency:1}]
@@ -189,9 +208,10 @@ mailbox:
 daily-reward:
   enabled: false                 # 每天首次登录时自动投递到玩家邮箱（离线期间不补发）
   message: "&a每日奖励已发放到你的邮箱"
-  items: []                      # 形如 [{material: "diamond", amount: 1}]
+  items: []                      # 原版物品，形如 [{material: "diamond", amount: 1}]；自定义物品用 /yizhan dailyreward add 登记
 ship-fee:
   currency-key: "currency"       # 快递费货币的识别键名（PDC / custom_data）
+  currency-value: ""             # 留空只按键名判定；填值后必须键和值都匹配（Nexo 共用键名靠值区分时必填）
 ```
 
 **缓冲时间优先级**：路由设置 > 驿站设置 > `default-buffer-seconds`。
@@ -243,6 +263,7 @@ item-filter:
 | `yz_notifications` | 玩家待发送通知，用于离线 / 跨服补发 |
 | `yz_mailbox_items` | 各玩家邮箱内的物品，按 `player_uuid` + `slot` 组织 |
 | `yz_daily_claims` | 每日奖励领取记录，按玩家记录最后领取日期 |
+| `yz_daily_rewards` | 登记的每日奖励模板物品（`/yizhan dailyreward add` 存入），按 `slot` 组织 |
 | `yz_mailbox_blocks` | 各子服的邮箱方块绑定位置 |
 
 物品以 `ItemStack#serializeAsBytes()` 序列化后存 `LONGBLOB`。
@@ -267,7 +288,7 @@ UPDATE yz_shipments SET status='DELIVERED' WHERE id=? AND status='IN_TRANSIT'
 
 **邮箱投递**：`mail send` / `mail give` / 每日奖励都走同一条路径 —— 把物品写入目标玩家 UUID 的 `yz_mailbox_items`（优先填已有堆叠、再占空槽），并写一条通知。目标玩家在任意子服上线或此刻在线，都会收到提示；超出邮箱容量的部分会被丢弃并记警告日志。
 
-**每日奖励**：玩家登录后 1 秒触发。用 `yz_daily_claims` 记录最后领取日期并做当日去重（`INSERT IGNORE` + `UPDATE ... WHERE claim_date<>?`），因此多子服重复登录也只会发一次，**离线期间不补发**。
+**每日奖励**：玩家登录后 1 秒触发。先汇总奖励物品（`yz_daily_rewards` 里登记的模板物品 + `daily-reward.items` 配置的原版材质），为空则不标记领取；否则用 `yz_daily_claims` 记录最后领取日期并做当日去重（`INSERT IGNORE` + `UPDATE ... WHERE claim_date<>?`），因此多子服重复登录也只会发一次，**离线期间不补发**。
 
 ## 界面说明
 
@@ -276,7 +297,7 @@ UPDATE yz_shipments SET status='DELIVERED' WHERE id=? AND status='IN_TRANSIT'
 | 选择页（both 模式） | 11 / 15 / 22 | 发货 / 收件箱 / 关闭 |
 | 发货区 | 0-44 内为物品区 | 放入待发货物品 |
 | 发货区 | 45 | 关闭 |
-| 发货区 | 46 | 快递费槽（放入带 `currency` 键的货币物品） |
+| 发货区 | 46 | 快递费槽（放入匹配 `currency-key` / `currency-value` 的货币物品） |
 | 发货区 | 47 | 切换到收件箱（仅 both 模式） |
 | 发货区 | 48 | 切换目的地（多路由时） |
 | 发货区 | 49 | 点击发货 |
