@@ -142,6 +142,7 @@ item-filter:
     - "ia"
   blocked-keys: []               # 精确拦截，例如 "nexo:item_id"
   allowed-items: []              # 白名单，优先级最高；按 key + value 精确放行，例如见下方
+  blocked-materials: []          # 原版物品黑名单，按材质名，例如 ["paper","diamond_sword"]
   block-custom-model-data: false # 是否额外拦截带 CustomModelData 的物品
 ```
 
@@ -155,6 +156,7 @@ item-filter:
 
 - key 的命名空间命中 `blocked-namespaces` 时拦截
 - key 的完整字符串命中 `blocked-keys` 时拦截
+- 物品材质名命中 `blocked-materials` 时拦截（原版物品也可拦，如 `paper`、`diamond_sword`）
 - `block-custom-model-data: true` 且物品带 CustomModelData 时拦截
 
 **白名单优先**：`allowed-items` 中的条目**优先于以上全部黑名单规则**，命中即放行。每个条目由 `key` 和 `value` 组成，两者都相等（key 忽略大小写，value 区分大小写）才生效。它对 PersistentDataContainer 与 `custom_data` 两条匹配路径都适用：
