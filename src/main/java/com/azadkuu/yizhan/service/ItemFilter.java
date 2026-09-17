@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 public class ItemFilter {
 
     private static final Pattern DATA_ENTRY = Pattern.compile(
-            "\"([A-Za-z0-9_.\\-]+:[A-Za-z0-9_./\\-]+)\"\\s*:\\s*(?:\"([^\"]*)\"|(-?[0-9]+(?:\\.[0-9]+)?[bBsSlLfFdD]?|true|false))");
+            "\"?([A-Za-z0-9_.\\-]+(?::[A-Za-z0-9_./\\-]+)?)\"?\\s*:\\s*(?:\"([^\"]*)\"|(-?[0-9]+(?:\\.[0-9]+)?[bBsSlLfFdD]?|true|false))");
 
     private final PluginConfig config;
     private final Consumer<String> debugLog;
