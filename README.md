@@ -13,6 +13,10 @@ Paper 1.21.x 跨服物资运输插件。把物品从一个服务器的容器，�
 - **非原版物品拦截**：按 `custom_data` / PersistentDataContainer 的命名空间做黑名单校验，默认拦截 Nexo、ItemsAdder 等自定义物品
 - **收件箱容量保护**：目标收件箱放不下时，投递会延后到下一个轮询周期重试，不会丢件
 - **发货与到货通知**：发货和投递完成都会给操作玩家发消息；发件人不在线时消息入库，下次在任意子服上线自动补发
+- **玩家邮箱**：全服共用一个邮箱方块（管理员用 `/yizhan mailbox bind` 绑定），玩家右键即可打开自己独立的邮箱，物品按 UUID 存库，天然跨服
+- **跨服发奖**：`/yizhan mail send` / `/yizhan mail give` 可把物品直接投递到任意玩家（含离线、含其他子服）的邮箱
+- **每日奖励**：玩家每天首次登录时，自动把配置好的奖励投递到自己的邮箱
+- **快递费**：路由可配置快递费，发货界面有独立费用槽，放入带 `currency` 键的货币物品才能发货
 
 ## 环境要求
 
@@ -90,16 +94,50 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 |---|---|
 | `/yizhan bind <名称> <send\|receive\|both>` | 把准星指向的方块（6 格内）绑定为驿站 |
 | `/yizhan unbind <名称>` | 解绑驿站，并清空其收件箱 |
-| `/yizhan route <起点> <终点> [缓冲秒]` | 建立或更新单向路由，省略秒数则用默认缓冲 |
+| `/yizhan route <起点> <终点> [缓冲秒] [快递费]` | 建立或更新单向路由，省略秒数则用默认缓冲 |
 | `/yizhan route remove <起点> <终点>` | 删除路由 |
+| `/yizhan fee <起点> <终点> <数量>` | 设置路由的快递费（需 `yizhan.route`） |
 | `/yizhan buffer <驿站> <秒>` | 单独设置某个驿站的缓冲时间 |
 | `/yizhan open <名称>` | 远程打开驿站容器 |
 | `/yizhan list` | 列出所有驿站 |
 | `/yizhan info <名称>` | 查看驿站详情 |
+| `/yizhan mailbox <bind\|unbind\|info>` | 把准星方块绑定为全服邮箱方块（需 `yizhan.admin`） |
+| `/yizhan mail send <玩家> [数量]` | 把主手物品发到目标玩家邮箱，省略数量则发整组 |
+| `/yizhan mail give <玩家> <物品ID> <数量>` | 发送指定物品到目标玩家邮箱 |
 | `/yizhan debugitem` | 诊断主手物品：打印 PDC / `custom_data` 键值对、CustomModelData 与拦截判定（需 `yizhan.admin`） |
 | `/yizhan reload` | 重载配置文件 |
 
 驿站名称只允许字母、数字、下划线和短横线，长度 1-32。
+
+`mail send` / `mail give` 的玩家参数支持**玩家名或 UUID**。玩家名只能解析到本子服有记录的玩家；如果目标玩家从未进过本子服，请直接填 UUID。
+
+## 玩家邮箱
+
+邮箱是**全服共用同一个方块**、但每个玩家各自独立的空间：
+
+1. 管理员在任意子服对准方块执行 `/yizhan mailbox bind`，把这个方块设为该子服的邮箱方块
+2. 玩家右键该方块，打开的是**自己的**邮箱（45 格）
+3. 邮箱内容按玩家 UUID 存库，因此所有子服共用同一份数据 —— 在 A 服收到的邮件，到 B 服打开同样能看到
+4. 关闭界面时自动保存
+
+投递到邮箱的途径有三种：`/yizhan mail send`、`/yizhan mail give`、每日奖励。
+
+## 快递费
+
+快递费**按数量计费**，金额配置在路由上：
+
+```text
+/yizhan fee station_a station_b 5        # 这条路由每次发货需要 5 个货币物品
+/yizhan route station_a station_b 300 5  # 建路由时一并设置
+```
+
+发货界面的**费用槽（底部左起第 2 格）**用于放货币物品。判定货币的方式：物品的 PDC / `custom_data` 键名等于 `ship-fee.currency-key`（默认 `currency`）即为货币，例如：
+
+```text
+/give @p minecraft:gold_nugget[minecraft:custom_data={currency:1}]
+```
+
+发货时从费用槽扣除固定个数，不足则禁止发货并提示。**费用槽里的物品不参与运输**，未发货就关闭界面会原样退回背包；发货后剩余的数量也会退回。
 
 ## 权限
 
@@ -108,7 +146,9 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | `yizhan.bind` | op | 绑定 / 解绑驿站 |
 | `yizhan.route` | op | 管理路由与缓冲时间 |
 | `yizhan.open` | true | 打开驿站容器 |
-| `yizhan.admin` | op | 重载配置等管理操作 |
+| `yizhan.mail` | true | 右键邮箱方块打开自己的邮箱 |
+| `yizhan.mail.send` | op | 用 `/yizhan mail` 给其他玩家邮箱发物品 |
+| `yizhan.admin` | op | 重载配置、绑定邮箱方块等管理操作 |
 
 ## 配置说明
 
@@ -144,9 +184,19 @@ item-filter:
   allowed-items: []              # 白名单，优先级最高；按 key + value 精确放行，例如见下方
   blocked-materials: []          # 原版物品黑名单，按材质名，例如 ["paper","diamond_sword"]
   block-custom-model-data: false # 是否额外拦截带 CustomModelData 的物品
+mailbox:
+  size: 45                       # 每个玩家独立邮箱的容量（9-45，会向上取整到整行）
+daily-reward:
+  enabled: false                 # 每天首次登录时自动投递到玩家邮箱（离线期间不补发）
+  message: "&a每日奖励已发放到你的邮箱"
+  items: []                      # 形如 [{material: "diamond", amount: 1}]
+ship-fee:
+  currency-key: "currency"       # 快递费货币的识别键名（PDC / custom_data）
 ```
 
 **缓冲时间优先级**：路由设置 > 驿站设置 > `default-buffer-seconds`。
+
+> 升级提示：服务器上**已存在**的 `config.yml` 不会自动补齐新增配置段（代码有内置默认值，运行不受影响）。如需调整 `mailbox`、`daily-reward`、`ship-fee`，请手动把对应段落补进配置文件，然后 `/yizhan reload`。
 
 **消息占位符**：`ship-start` 支持 `%id%`、`%to%`、`%buffer%`；`ship-arrived` 支持 `%id%`、`%station%`。两个模板都支持 `&` 颜色代码。
 
@@ -186,11 +236,14 @@ item-filter:
 | 表 | 用途 |
 |---|---|
 | `yz_stations` | 驿站定义：位置、模式、容量、缓冲、version |
-| `yz_routes` | 单向路由：起点、终点、可选缓冲 |
+| `yz_routes` | 单向路由：起点、终点、可选缓冲、快递费 |
 | `yz_shipments` | 发货单：状态、出发时间、到达时间、发件人 |
 | `yz_shipment_items` | 在途包裹内的物品快照 |
 | `yz_station_items` | 驿站收件箱内的物品 |
 | `yz_notifications` | 玩家待发送通知，用于离线 / 跨服补发 |
+| `yz_mailbox_items` | 各玩家邮箱内的物品，按 `player_uuid` + `slot` 组织 |
+| `yz_daily_claims` | 每日奖励领取记录，按玩家记录最后领取日期 |
+| `yz_mailbox_blocks` | 各子服的邮箱方块绑定位置 |
 
 物品以 `ItemStack#serializeAsBytes()` 序列化后存 `LONGBLOB`。
 
@@ -212,6 +265,10 @@ UPDATE yz_shipments SET status='DELIVERED' WHERE id=? AND status='IN_TRANSIT'
 
 **通知**：发货时直接给操作玩家发送「发货成功」消息。投递成功后把「包裹已到达」写入 `yz_notifications`；若发件人此刻恰好在本子服在线则立即发送，否则保留为未送达，玩家下次在任意子服上线时（延迟 1 秒）自动补发并标记已送达。通知领取使用 `SELECT ... FOR UPDATE` + 标记，多个子服同时上线不会重复发送。
 
+**邮箱投递**：`mail send` / `mail give` / 每日奖励都走同一条路径 —— 把物品写入目标玩家 UUID 的 `yz_mailbox_items`（优先填已有堆叠、再占空槽），并写一条通知。目标玩家在任意子服上线或此刻在线，都会收到提示；超出邮箱容量的部分会被丢弃并记警告日志。
+
+**每日奖励**：玩家登录后 1 秒触发。用 `yz_daily_claims` 记录最后领取日期并做当日去重（`INSERT IGNORE` + `UPDATE ... WHERE claim_date<>?`），因此多子服重复登录也只会发一次，**离线期间不补发**。
+
 ## 界面说明
 
 | 界面 | 槽位 | 功能 |
@@ -219,22 +276,30 @@ UPDATE yz_shipments SET status='DELIVERED' WHERE id=? AND status='IN_TRANSIT'
 | 选择页（both 模式） | 11 / 15 / 22 | 发货 / 收件箱 / 关闭 |
 | 发货区 | 0-44 内为物品区 | 放入待发货物品 |
 | 发货区 | 45 | 关闭 |
+| 发货区 | 46 | 快递费槽（放入带 `currency` 键的货币物品） |
 | 发货区 | 47 | 切换到收件箱（仅 both 模式） |
 | 发货区 | 48 | 切换目的地（多路由时） |
 | 发货区 | 49 | 点击发货 |
-| 发货区 | 53 | 信息（在途发货单等） |
+| 发货区 | 53 | 信息（在途发货单、快递费要求等） |
 | 收件箱 | 0-44 内为物品区 | 取出物品，禁止放入 |
 | 收件箱 | 49 | 全部领取 |
 | 收件箱 | 53 | 信息（容量占用、在途到达数） |
+| 邮箱 | 0 至 `mailbox.size`-1 | 取出 / 放入物品 |
+| 邮箱 | 底部第 1 格 | 关闭 |
+| 邮箱 | 底部第 5 格 | 全部领取 |
+| 邮箱 | 底部第 9 格 | 信息（容量占用） |
 
 未点击「发货」就关闭界面，或切换到收件箱时，发货区内的物品会原样退回玩家背包（背包满则掉落原地）。
 
 ## 已知限制
 
 - **发货区不持久化**：未点击发货的物品只存在于界面里，此时服务器崩溃会丢失。物品一旦点击发货写入数据库，就不会丢。
-- **界面读取为同步查询**：打开收件箱时会同步读一次数据库，数据量大时可能有短暂卡顿。
+- **界面读取为同步查询**：打开收件箱或邮箱时会同步读一次数据库，数据量大时可能有短暂卡顿。
+- **邮箱不实时刷新**：邮箱界面打开期间收到新邮件不会即时刷新（避免覆盖未保存的改动导致复制），关闭后重新打开即可看到，届时也会收到邮件通知。
+- **邮箱容量溢出会丢弃**：投递时若邮箱已满，放不下的物品会被丢弃并写入警告日志。
 - `allow-cancel-shipment` 与 `max-station-size` 为预留配置，当前版本尚未生效。
-- 驿站方块会拦截原版右键交互，建议绑定在普通方块（或专用装饰方块）上，避免与原版容器功能混淆。
+- 驿站方块与邮箱方块会拦截原版右键交互，建议绑定在普通方块（或专用装饰方块）上，避免与原版容器功能混淆。
+- 邮箱方块被破坏后不会自动解绑，需要重新 `bind` 到新位置。
 
 ## 目录结构
 
@@ -245,7 +310,7 @@ src/main/java/com/azadkuu/yizhan/
   config/                    配置读取
   model/                     驿站、路由、发货单等数据模型
   storage/                   存储接口与 MySQL 实现
-  service/                   物品过滤、发货逻辑、到货通知
+  service/                   物品过滤、发货逻辑、邮箱与每日奖励、到货通知
   gui/                       虚拟容器界面
   listener/                  方块交互、容器事件、上线补发通知
   task/                      投递轮询任务
