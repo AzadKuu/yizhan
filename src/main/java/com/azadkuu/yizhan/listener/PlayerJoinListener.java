@@ -1,6 +1,7 @@
 package com.azadkuu.yizhan.listener;
 
 import com.azadkuu.yizhan.YizhanPlugin;
+import com.azadkuu.yizhan.service.MailboxService;
 import com.azadkuu.yizhan.service.NotificationService;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -13,10 +14,13 @@ public class PlayerJoinListener implements Listener {
 
     private final YizhanPlugin plugin;
     private final NotificationService notificationService;
+    private final MailboxService mailboxService;
 
-    public PlayerJoinListener(YizhanPlugin plugin, NotificationService notificationService) {
+    public PlayerJoinListener(YizhanPlugin plugin, NotificationService notificationService,
+                              MailboxService mailboxService) {
         this.plugin = plugin;
         this.notificationService = notificationService;
+        this.mailboxService = mailboxService;
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -25,6 +29,7 @@ public class PlayerJoinListener implements Listener {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline()) {
                 notificationService.flush(player);
+                mailboxService.grantDailyReward(player);
             }
         }, 20L);
     }

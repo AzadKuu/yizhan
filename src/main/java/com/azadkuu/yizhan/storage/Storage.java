@@ -1,5 +1,6 @@
 package com.azadkuu.yizhan.storage;
 
+import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Notification;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Shipment;
@@ -59,4 +60,18 @@ public interface Storage extends AutoCloseable {
     void pushNotification(UUID player, String message);
 
     List<Notification> claimNotifications(UUID player);
+
+    Map<Integer, ItemStack> loadMailboxItems(UUID player);
+
+    void saveMailboxItems(UUID player, Map<Integer, ItemStack> items);
+
+    List<ItemStack> depositToMailbox(UUID player, List<ItemStack> items, int size);
+
+    boolean markDailyClaim(UUID player, String date);
+
+    MailboxBlock getMailboxBlock(String serverId);
+
+    void saveMailboxBlock(MailboxBlock block);
+
+    void deleteMailboxBlock(String serverId);
 }

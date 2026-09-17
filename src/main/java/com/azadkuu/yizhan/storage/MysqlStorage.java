@@ -1,6 +1,7 @@
 package com.azadkuu.yizhan.storage;
 
 import com.azadkuu.yizhan.config.PluginConfig;
+import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Notification;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Shipment;
@@ -96,6 +97,7 @@ public class MysqlStorage implements Storage {
                         + "to_station VARCHAR(64) NOT NULL,"
                         + "buffer_seconds INT NULL,"
                         + "enabled TINYINT NOT NULL DEFAULT 1,"
+                        + "fee INT NOT NULL DEFAULT 0,"
                         + "PRIMARY KEY (id),"
                         + "UNIQUE KEY uk_yz_route (from_station, to_station)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
@@ -136,12 +138,52 @@ public class MysqlStorage implements Storage {
                         + "delivered TINYINT NOT NULL DEFAULT 0,"
                         + "PRIMARY KEY (id),"
                         + "KEY idx_yz_notify (player_uuid, delivered)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "mailbox_items ("
+                        + "player_uuid VARCHAR(36) NOT NULL,"
+                        + "slot INT NOT NULL,"
+                        + "item_data LONGBLOB NOT NULL,"
+                        + "PRIMARY KEY (player_uuid, slot)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "daily_claims ("
+                        + "player_uuid VARCHAR(36) NOT NULL,"
+                        + "claim_date VARCHAR(10) NOT NULL,"
+                        + "claimed_at BIGINT NOT NULL,"
+                        + "PRIMARY KEY (player_uuid)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "mailbox_blocks ("
+                        + "server_id VARCHAR(64) NOT NULL,"
+                        + "world VARCHAR(64) NOT NULL,"
+                        + "x INT NOT NULL, y INT NOT NULL, z INT NOT NULL,"
+                        + "created_at BIGINT NOT NULL,"
+                        + "PRIMARY KEY (server_id)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         };
         try (Connection c = conn(); Statement st = c.createStatement()) {
             for (String sql : ddl) {
                 st.executeUpdate(sql);
             }
+            ensureColumn(c, prefix + "routes", "fee", "fee INT NOT NULL DEFAULT 0");
+        }
+    }
+
+    private void ensureColumn(Connection c, String table, String column, String ddl) throws SQLException {
+        String check = "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?";
+        try (PreparedStatement ps = c.prepareStatement(check)) {
+            ps.setString(1, table);
+            ps.setString(2, column);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) {
+                    return;
+                }
+            }
+        }
+        try (Statement st = c.createStatement()) {
+            st.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + ddl);
         }
     }
 
@@ -189,6 +231,7 @@ public class MysqlStorage implements Storage {
         int buffer = rs.getInt("buffer_seconds");
         route.setBufferSeconds(rs.wasNull() ? null : buffer);
         route.setEnabled(rs.getBoolean("enabled"));
+        route.setFee(rs.getInt("fee"));
         return route;
     }
 
@@ -357,8 +400,8 @@ public class MysqlStorage implements Storage {
 
     @Override
     public void saveRoute(Route route) {
-        String sql = "INSERT INTO " + prefix + "routes (from_station, to_station, buffer_seconds, enabled) VALUES (?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE buffer_seconds=VALUES(buffer_seconds), enabled=VALUES(enabled)";
+        String sql = "INSERT INTO " + prefix + "routes (from_station, to_station, buffer_seconds, enabled, fee) VALUES (?,?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE buffer_seconds=VALUES(buffer_seconds), enabled=VALUES(enabled), fee=VALUES(fee)";
         try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, route.getFromStation());
             ps.setString(2, route.getToStation());
@@ -368,6 +411,7 @@ public class MysqlStorage implements Storage {
                 ps.setInt(3, route.getBufferSeconds());
             }
             ps.setBoolean(4, route.isEnabled());
+            ps.setInt(5, route.getFee());
             ps.executeUpdate();
         } catch (SQLException ex) {
             throw new StorageException("saveRoute failed", ex);
@@ -822,6 +866,186 @@ public class MysqlStorage implements Storage {
             }
         } catch (SQLException ex) {
             throw new StorageException("claimNotifications failed", ex);
+        }
+    }
+
+    @Override
+    public Map<Integer, ItemStack> loadMailboxItems(UUID player) {
+        Map<Integer, ItemStack> out = new TreeMap<>();
+        String sql = "SELECT slot, item_data FROM " + prefix + "mailbox_items WHERE player_uuid=? ORDER BY slot";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, player.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ItemStack item = ItemSerializer.deserialize(rs.getBytes(2));
+                    if (item != null && !item.getType().isAir()) {
+                        out.put(rs.getInt(1), item);
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("loadMailboxItems failed", ex);
+        }
+        return out;
+    }
+
+    @Override
+    public void saveMailboxItems(UUID player, Map<Integer, ItemStack> items) {
+        try (Connection c = conn()) {
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement ps = c.prepareStatement("DELETE FROM " + prefix + "mailbox_items WHERE player_uuid=?")) {
+                    ps.setString(1, player.toString());
+                    ps.executeUpdate();
+                }
+                try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix
+                        + "mailbox_items (player_uuid, slot, item_data) VALUES (?,?,?)")) {
+                    for (Map.Entry<Integer, ItemStack> entry : items.entrySet()) {
+                        ItemStack item = entry.getValue();
+                        if (item == null || item.getType().isAir()) {
+                            continue;
+                        }
+                        ps.setString(1, player.toString());
+                        ps.setInt(2, entry.getKey());
+                        ps.setBytes(3, ItemSerializer.serialize(item));
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+                c.commit();
+            } catch (SQLException ex) {
+                c.rollback();
+                throw ex;
+            } finally {
+                try {
+                    c.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("saveMailboxItems failed", ex);
+        }
+    }
+
+    @Override
+    public List<ItemStack> depositToMailbox(UUID player, List<ItemStack> items, int size) {
+        List<ItemStack> leftover = new ArrayList<>();
+        try (Connection c = conn()) {
+            c.setAutoCommit(false);
+            try {
+                Set<Integer> occupied = new HashSet<>();
+                try (PreparedStatement ps = c.prepareStatement("SELECT slot FROM " + prefix
+                        + "mailbox_items WHERE player_uuid=? FOR UPDATE")) {
+                    ps.setString(1, player.toString());
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            occupied.add(rs.getInt(1));
+                        }
+                    }
+                }
+                List<Integer> free = freeSlots(size, occupied);
+                try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix
+                        + "mailbox_items (player_uuid, slot, item_data) VALUES (?,?,?) "
+                        + "ON DUPLICATE KEY UPDATE item_data=VALUES(item_data)")) {
+                    int index = 0;
+                    for (ItemStack item : items) {
+                        if (item == null || item.getType().isAir()) {
+                            continue;
+                        }
+                        if (index >= free.size()) {
+                            leftover.add(item);
+                            continue;
+                        }
+                        ps.setString(1, player.toString());
+                        ps.setInt(2, free.get(index++));
+                        ps.setBytes(3, ItemSerializer.serialize(item));
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+                c.commit();
+            } catch (SQLException ex) {
+                c.rollback();
+                throw ex;
+            } finally {
+                try {
+                    c.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("depositToMailbox failed", ex);
+        }
+        return leftover;
+    }
+
+    @Override
+    public boolean markDailyClaim(UUID player, String date) {
+        try (Connection c = conn()) {
+            try (PreparedStatement ps = c.prepareStatement("INSERT IGNORE INTO " + prefix
+                    + "daily_claims (player_uuid, claim_date, claimed_at) VALUES (?,?,?)")) {
+                ps.setString(1, player.toString());
+                ps.setString(2, date);
+                ps.setLong(3, System.currentTimeMillis());
+                if (ps.executeUpdate() > 0) {
+                    return true;
+                }
+            }
+            try (PreparedStatement ps = c.prepareStatement("UPDATE " + prefix
+                    + "daily_claims SET claim_date=?, claimed_at=? WHERE player_uuid=? AND claim_date<>?")) {
+                ps.setString(1, date);
+                ps.setLong(2, System.currentTimeMillis());
+                ps.setString(3, player.toString());
+                ps.setString(4, date);
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("markDailyClaim failed", ex);
+        }
+    }
+
+    @Override
+    public MailboxBlock getMailboxBlock(String serverId) {
+        String sql = "SELECT world, x, y, z FROM " + prefix + "mailbox_blocks WHERE server_id=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, serverId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new MailboxBlock(serverId, rs.getString(1), rs.getInt(2), rs.getInt(3), rs.getInt(4));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("getMailboxBlock failed", ex);
+        }
+        return null;
+    }
+
+    @Override
+    public void saveMailboxBlock(MailboxBlock block) {
+        String sql = "INSERT INTO " + prefix + "mailbox_blocks (server_id, world, x, y, z, created_at) "
+                + "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE world=VALUES(world), x=VALUES(x), "
+                + "y=VALUES(y), z=VALUES(z)";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, block.serverId());
+            ps.setString(2, block.world());
+            ps.setInt(3, block.x());
+            ps.setInt(4, block.y());
+            ps.setInt(5, block.z());
+            ps.setLong(6, System.currentTimeMillis());
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new StorageException("saveMailboxBlock failed", ex);
+        }
+    }
+
+    @Override
+    public void deleteMailboxBlock(String serverId) {
+        String sql = "DELETE FROM " + prefix + "mailbox_blocks WHERE server_id=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, serverId);
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new StorageException("deleteMailboxBlock failed", ex);
         }
     }
 }

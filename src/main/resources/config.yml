@@ -35,3 +35,16 @@ item-filter:
   allowed-items: []
   blocked-materials: []          # 原版物品黑名单，按材质名，例如 ["paper","diamond_sword"]，可带 minecraft: 前缀
   block-custom-model-data: false
+mailbox:
+  size: 45                       # 每个玩家独立邮箱的容量（9-45，会向上取整到整行）
+daily-reward:
+  enabled: false                 # 每天首次登录时自动投递到玩家邮箱（离线期间不补发）
+  message: "&a每日奖励已发放到你的邮箱"
+  # 示例：
+  # items:
+  #   - material: "diamond"
+  #     amount: 1
+  items: []
+ship-fee:
+  # 快递费货币的识别键：物品的 PDC / custom_data 键名包含它即视为货币
+  currency-key: "currency"

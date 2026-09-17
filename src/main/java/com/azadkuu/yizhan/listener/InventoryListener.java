@@ -3,6 +3,7 @@ package com.azadkuu.yizhan.listener;
 import com.azadkuu.yizhan.YizhanPlugin;
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.gui.GuiManager;
+import com.azadkuu.yizhan.gui.MailboxHolder;
 import com.azadkuu.yizhan.gui.StationHolder;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.service.ItemFilter;
@@ -15,6 +16,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
@@ -24,6 +26,7 @@ import org.bukkit.inventory.ItemStack;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 public class InventoryListener implements Listener {
 
@@ -49,13 +52,22 @@ public class InventoryListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onClick(InventoryClickEvent event) {
         Inventory top = event.getView().getTopInventory();
+        Player player = (Player) event.getWhoClicked();
+        if (top.getHolder() instanceof MailboxHolder mailbox) {
+            handleMailboxClick(event, player, top, mailbox);
+            return;
+        }
         if (!(top.getHolder() instanceof StationHolder holder)) {
             return;
         }
-        Player player = (Player) event.getWhoClicked();
         int raw = event.getRawSlot();
         int guiSize = top.getSize();
-        if (raw < 0 || raw >= guiSize) {
+        if (raw < 0) {
+            return;
+        }
+
+        if (raw >= guiSize) {
+            handlePlayerInventoryClick(event, player, top, holder, guiSize);
             return;
         }
 
@@ -68,6 +80,12 @@ public class InventoryListener implements Listener {
         if (isControlSlot(raw, holder)) {
             event.setCancelled(true);
             handleControl(player, holder, raw);
+            return;
+        }
+
+        if (holder.getView() == StationHolder.View.SEND && raw == GuiManager.SLOT_FEE) {
+            event.setCancelled(true);
+            handleFeeSlot(event, player, holder);
             return;
         }
 
@@ -93,9 +111,80 @@ public class InventoryListener implements Listener {
         }
     }
 
+    /**
+     * 处理点击落在玩家背包区域的情况。shift 点击（MOVE_TO_OTHER_INVENTORY）会把背包物品
+     * 移动到 GUI，必须在这里显式接管，否则会绕过物品过滤直接进入发货区。
+     */
+    private void handlePlayerInventoryClick(InventoryClickEvent event, Player player, Inventory top,
+                                            StationHolder holder, int guiSize) {
+        if (event.getAction() != InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+            return;
+        }
+        if (holder.getView() == StationHolder.View.CHOOSER) {
+            event.setCancelled(true);
+            return;
+        }
+        event.setCancelled(true);
+        ItemStack current = event.getCurrentItem();
+        if (current == null || current.getType().isAir()) {
+            return;
+        }
+        if (holder.getView() == StationHolder.View.RECEIVE) {
+            Msg.send(player, config.getPrefix(), "&c收件箱只能取出，不能放入");
+            return;
+        }
+        if (filter.isBlocked(current)) {
+            sendItemBlocked(player, current, " &c被识别为自定义物品，禁止运输");
+            return;
+        }
+        ItemStack leftover = moveInto(top, 0, holder.getStation().getSize(), current);
+        event.setCurrentItem(leftover);
+        player.updateInventory();
+    }
+
+    private void handleMailboxClick(InventoryClickEvent event, Player player, Inventory top, MailboxHolder mailbox) {
+        int raw = event.getRawSlot();
+        int guiSize = top.getSize();
+        int items = config.getMailboxSize();
+        if (raw < 0) {
+            return;
+        }
+        if (raw >= guiSize) {
+            if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+                event.setCancelled(true);
+                ItemStack current = event.getCurrentItem();
+                if (current == null || current.getType().isAir()) {
+                    return;
+                }
+                ItemStack leftover = moveInto(top, 0, items, current);
+                event.setCurrentItem(leftover);
+                player.updateInventory();
+            }
+            return;
+        }
+        if (raw >= items) {
+            event.setCancelled(true);
+            if (raw == GuiManager.mailSlotClose(items)) {
+                player.closeInventory();
+            } else if (raw == GuiManager.mailSlotTakeAll(items)) {
+                claimAllMailbox(player, mailbox);
+            }
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onDrag(InventoryDragEvent event) {
         Inventory top = event.getView().getTopInventory();
+        if (top.getHolder() instanceof MailboxHolder) {
+            int items = config.getMailboxSize();
+            for (int slot : event.getRawSlots()) {
+                if (slot >= items && slot < top.getSize()) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+            return;
+        }
         if (!(top.getHolder() instanceof StationHolder holder)) {
             return;
         }
@@ -115,7 +204,8 @@ public class InventoryListener implements Listener {
             return;
         }
         for (int slot : event.getRawSlots()) {
-            if (slot < guiSize && (isControlSlot(slot, holder) || slot >= holder.getStation().getSize())) {
+            if (slot < guiSize && (isControlSlot(slot, holder) || slot == GuiManager.SLOT_FEE
+                    || slot >= holder.getStation().getSize())) {
                 event.setCancelled(true);
                 return;
             }
@@ -133,10 +223,18 @@ public class InventoryListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onClose(InventoryCloseEvent event) {
         Inventory top = event.getView().getTopInventory();
+        Player player = (Player) event.getPlayer();
+        if (top.getHolder() instanceof MailboxHolder mailbox) {
+            if (guiManager.getOpenMailbox(player.getUniqueId()) != mailbox) {
+                return;
+            }
+            guiManager.unregisterMailbox(player.getUniqueId());
+            saveMailbox(mailbox);
+            return;
+        }
         if (!(top.getHolder() instanceof StationHolder holder)) {
             return;
         }
-        Player player = (Player) event.getPlayer();
         if (guiManager.getOpenHolder(player.getUniqueId()) != holder) {
             return;
         }
@@ -185,6 +283,46 @@ public class InventoryListener implements Listener {
         }
     }
 
+    private void handleFeeSlot(InventoryClickEvent event, Player player, StationHolder holder) {
+        ItemStack stored = holder.getFeeItem();
+        if (stored != null && stored.getType().isAir()) {
+            stored = null;
+        }
+        ItemStack cursor = event.getCursor();
+        boolean hasCursor = cursor != null && !cursor.getType().isAir();
+        String hint = "&c快递费槽只能放带 &f" + config.getCurrencyKey() + " &c键的货币物品";
+
+        if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+            ItemStack current = event.getCurrentItem();
+            if (current == null || current.getType().isAir()) {
+                return;
+            }
+            if (!filter.isCurrency(current)) {
+                Msg.send(player, config.getPrefix(), hint);
+            } else if (stored != null) {
+                Msg.send(player, config.getPrefix(), "&7快递费槽已有物品，请先取出");
+            } else {
+                holder.setFeeItem(current.clone());
+                event.setCurrentItem(null);
+            }
+        } else if (hasCursor) {
+            if (!filter.isCurrency(cursor)) {
+                Msg.send(player, config.getPrefix(), hint);
+            } else {
+                holder.setFeeItem(cursor.clone());
+                event.setCursor(stored);
+            }
+        } else if (stored == null) {
+            Msg.send(player, config.getPrefix(), "&7快递费槽是空的，请放入带 &f"
+                    + config.getCurrencyKey() + " &7键的货币物品");
+        } else {
+            holder.setFeeItem(null);
+            event.setCursor(stored);
+        }
+        guiManager.render(holder);
+        player.updateInventory();
+    }
+
     private void cycleRoute(Player player, StationHolder holder) {
         if (holder.getRoutes().size() <= 1) {
             Msg.send(player, config.getPrefix(), "&7当前只有一个可用路由");
@@ -214,6 +352,20 @@ public class InventoryListener implements Listener {
             return;
         }
         Route route = routes.get(Math.floorMod(holder.getSelectedRoute(), routes.size()));
+        int fee = route.getFee();
+        ItemStack feeItem = holder.getFeeItem();
+        if (fee > 0) {
+            if (feeItem == null || feeItem.getType().isAir() || !filter.isCurrency(feeItem)) {
+                Msg.send(player, config.getPrefix(), "&c本线路需要 &f" + fee
+                        + " &c个货币物品作为快递费，请放入快递费槽");
+                return;
+            }
+            if (feeItem.getAmount() < fee) {
+                Msg.send(player, config.getPrefix(), "&c快递费不足，需要 &f" + fee
+                        + " &c个，当前只有 &f" + feeItem.getAmount() + " &c个");
+                return;
+            }
+        }
         Inventory inventory = holder.getInventory();
         int size = holder.getStation().getSize();
         Map<Integer, ItemStack> items = new TreeMap<>();
@@ -248,11 +400,22 @@ public class InventoryListener implements Listener {
         for (int i = 0; i < size; i++) {
             inventory.setItem(i, null);
         }
+        if (feeItem != null && !feeItem.getType().isAir()) {
+            int remain = Math.max(0, feeItem.getAmount() - fee);
+            if (remain > 0) {
+                ItemStack back = feeItem.clone();
+                back.setAmount(remain);
+                giveOrDrop(player, back);
+            }
+            holder.setFeeItem(null);
+            inventory.setItem(GuiManager.SLOT_FEE, null);
+        }
         player.closeInventory();
         int buffer = transport.resolveBufferSeconds(route, holder.getStation());
         if (config.isDebug()) {
             plugin.getLogger().info("[debug] 发货成功 #" + shipmentId + " " + holder.getStation().getId()
-                    + " -> " + route.getToStation() + " 物品组数=" + items.size() + " 缓冲=" + buffer + "s");
+                    + " -> " + route.getToStation() + " 物品组数=" + items.size()
+                    + " 快递费=" + fee + " 缓冲=" + buffer + "s");
         }
         Msg.send(player, config.getPrefix(), notificationService.shipStart(shipmentId, route.getToStation(), buffer));
     }
@@ -267,15 +430,34 @@ public class InventoryListener implements Listener {
                 continue;
             }
             inventory.setItem(i, null);
-            Map<Integer, ItemStack> left = player.getInventory().addItem(item);
-            for (ItemStack drop : left.values()) {
-                player.getWorld().dropItemNaturally(player.getLocation(), drop);
-            }
+            giveOrDrop(player, item);
             moved++;
         }
         if (moved > 0) {
             holder.setDirty(true);
             Msg.send(player, config.getPrefix(), "&a已领取 &f" + moved + " &a组物品");
+        }
+    }
+
+    private void claimAllMailbox(Player player, MailboxHolder holder) {
+        Inventory inventory = holder.getInventory();
+        int items = config.getMailboxSize();
+        int moved = 0;
+        for (int i = 0; i < items; i++) {
+            ItemStack item = inventory.getItem(i);
+            if (item == null || item.getType().isAir()) {
+                continue;
+            }
+            inventory.setItem(i, null);
+            giveOrDrop(player, item);
+            moved++;
+        }
+        guiManager.renderMailbox(holder);
+        player.updateInventory();
+        if (moved > 0) {
+            Msg.send(player, config.getPrefix(), "&a已领取 &f" + moved + " &a组物品");
+        } else {
+            Msg.send(player, config.getPrefix(), "&7邮箱是空的");
         }
     }
 
@@ -296,11 +478,35 @@ public class InventoryListener implements Listener {
                 continue;
             }
             inventory.setItem(i, null);
-            Map<Integer, ItemStack> left = player.getInventory().addItem(item);
-            for (ItemStack drop : left.values()) {
-                player.getWorld().dropItemNaturally(player.getLocation(), drop);
-            }
+            giveOrDrop(player, item);
         }
+        ItemStack feeItem = holder.getFeeItem();
+        if (feeItem != null && !feeItem.getType().isAir()) {
+            holder.setFeeItem(null);
+            inventory.setItem(GuiManager.SLOT_FEE, null);
+            giveOrDrop(player, feeItem);
+        }
+    }
+
+    private void saveMailbox(MailboxHolder holder) {
+        Inventory inventory = holder.getInventory();
+        int items = config.getMailboxSize();
+        Map<Integer, ItemStack> snapshot = new TreeMap<>();
+        for (int i = 0; i < items; i++) {
+            ItemStack item = inventory.getItem(i);
+            if (item == null || item.getType().isAir()) {
+                continue;
+            }
+            snapshot.put(i, item.clone());
+        }
+        UUID owner = holder.getOwner();
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                storage.saveMailboxItems(owner, snapshot);
+            } catch (RuntimeException ex) {
+                plugin.getLogger().warning("保存邮箱失败: " + ex.getMessage());
+            }
+        });
     }
 
     private void saveReceive(Player player, StationHolder holder) {
@@ -366,5 +572,36 @@ public class InventoryListener implements Listener {
             }
             default -> null;
         };
+    }
+
+    private void giveOrDrop(Player player, ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return;
+        }
+        Map<Integer, ItemStack> left = player.getInventory().addItem(item);
+        for (ItemStack drop : left.values()) {
+            player.getWorld().dropItemNaturally(player.getLocation(), drop);
+        }
+    }
+
+    private ItemStack moveInto(Inventory top, int from, int to, ItemStack source) {
+        ItemStack moving = source.clone();
+        for (int i = from; i < to && !moving.getType().isAir(); i++) {
+            ItemStack slotItem = top.getItem(i);
+            if (slotItem == null || slotItem.getType().isAir()) {
+                top.setItem(i, moving);
+                return null;
+            }
+            if (slotItem.isSimilar(moving)) {
+                int space = slotItem.getMaxStackSize() - slotItem.getAmount();
+                if (space > 0) {
+                    int move = Math.min(space, moving.getAmount());
+                    slotItem.setAmount(slotItem.getAmount() + move);
+                    top.setItem(i, slotItem);
+                    moving.setAmount(moving.getAmount() - move);
+                }
+            }
+        }
+        return moving.getType().isAir() ? null : moving;
     }
 }

@@ -19,6 +19,12 @@ permissions:
   yizhan.open:
     description: Open station containers
     default: true
+  yizhan.mail:
+    description: Open own mailbox by right-clicking the mailbox block
+    default: true
+  yizhan.mail.send:
+    description: Send items or rewards to another player's mailbox
+    default: op
   yizhan.admin:
     description: Reload and administrative actions
     default: op

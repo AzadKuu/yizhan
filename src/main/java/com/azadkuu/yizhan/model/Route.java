@@ -7,6 +7,7 @@ public class Route {
     private String toStation;
     private Integer bufferSeconds;
     private boolean enabled = true;
+    private int fee;
 
     public int getId() {
         return id;
@@ -46,5 +47,13 @@ public class Route {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public int getFee() {
+        return fee;
+    }
+
+    public void setFee(int fee) {
+        this.fee = fee;
     }
 }

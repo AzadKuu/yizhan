@@ -7,6 +7,7 @@ import com.azadkuu.yizhan.listener.InteractListener;
 import com.azadkuu.yizhan.listener.InventoryListener;
 import com.azadkuu.yizhan.listener.PlayerJoinListener;
 import com.azadkuu.yizhan.service.ItemFilter;
+import com.azadkuu.yizhan.service.MailboxService;
 import com.azadkuu.yizhan.service.NotificationService;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.MysqlStorage;
@@ -22,6 +23,7 @@ public final class YizhanPlugin extends JavaPlugin {
     private ItemFilter itemFilter;
     private TransportService transport;
     private NotificationService notificationService;
+    private MailboxService mailboxService;
     private GuiManager guiManager;
     private int deliveryTaskId = -1;
 
@@ -45,8 +47,15 @@ public final class YizhanPlugin extends JavaPlugin {
         this.transport = new TransportService(config, storage);
         this.notificationService = new NotificationService(config, storage);
         this.guiManager = new GuiManager(config, storage, transport, itemFilter);
+        this.mailboxService = new MailboxService(this, config, storage, notificationService);
+        try {
+            guiManager.loadMailboxBlock();
+        } catch (RuntimeException ex) {
+            getLogger().warning("读取邮箱方块绑定失败: " + ex.getMessage());
+        }
 
-        YizhanCommand command = new YizhanCommand(this, config, storage, transport, guiManager, itemFilter);
+        YizhanCommand command = new YizhanCommand(this, config, storage, transport, guiManager, itemFilter,
+                mailboxService);
         PluginCommand pluginCommand = getCommand("yizhan");
         if (pluginCommand != null) {
             pluginCommand.setExecutor(command);
@@ -57,7 +66,7 @@ public final class YizhanPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new InventoryListener(this, config, storage, itemFilter, transport, notificationService, guiManager), this);
         getServer().getPluginManager().registerEvents(
-                new PlayerJoinListener(this, notificationService), this);
+                new PlayerJoinListener(this, notificationService, mailboxService), this);
 
         long interval = 20L * config.getPollIntervalSeconds();
         this.deliveryTaskId = getServer().getScheduler()
@@ -88,6 +97,11 @@ public final class YizhanPlugin extends JavaPlugin {
     public void reload() {
         reloadConfig();
         config.load(getConfig());
+        try {
+            guiManager.loadMailboxBlock();
+        } catch (RuntimeException ex) {
+            getLogger().warning("读取邮箱方块绑定失败: " + ex.getMessage());
+        }
         getLogger().info("配置已重载, debug=" + config.isDebug());
         logItemFilter();
     }
@@ -104,5 +118,13 @@ public final class YizhanPlugin extends JavaPlugin {
 
     public Storage getStorage() {
         return storage;
+    }
+
+    public MailboxService getMailboxService() {
+        return mailboxService;
+    }
+
+    public GuiManager getGuiManager() {
+        return guiManager;
     }
 }

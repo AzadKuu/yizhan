@@ -4,6 +4,7 @@ import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Station;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,7 @@ public class StationHolder implements InventoryHolder {
     private boolean shipped;
     private boolean dirty;
     private int baseVersion;
+    private ItemStack feeItem;
 
     public StationHolder(Station station, View view) {
         this.station = station;
@@ -90,5 +92,13 @@ public class StationHolder implements InventoryHolder {
 
     public void setBaseVersion(int baseVersion) {
         this.baseVersion = baseVersion;
+    }
+
+    public ItemStack getFeeItem() {
+        return feeItem;
+    }
+
+    public void setFeeItem(ItemStack feeItem) {
+        this.feeItem = feeItem;
     }
 }

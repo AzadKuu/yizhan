@@ -198,6 +198,32 @@ public class ItemFilter {
         return item.getType().name();
     }
 
+    @SuppressWarnings("deprecation")
+    public boolean isCurrency(ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return false;
+        }
+        String currencyKey = config.getCurrencyKey();
+        if (currencyKey == null || currencyKey.isBlank()) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return false;
+        }
+        for (NamespacedKey key : meta.getPersistentDataContainer().getKeys()) {
+            if (key.toString().equalsIgnoreCase(currencyKey) || key.getKey().equalsIgnoreCase(currencyKey)) {
+                return true;
+            }
+        }
+        for (String key : parseCustomData(meta).keySet()) {
+            if (key.equalsIgnoreCase(currencyKey)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Component nameComponent(ItemStack item) {
         if (item == null || item.getType().isAir()) {
             return Component.text("空");

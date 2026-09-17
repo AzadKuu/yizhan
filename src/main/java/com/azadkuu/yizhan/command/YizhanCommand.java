@@ -3,16 +3,21 @@ package com.azadkuu.yizhan.command;
 import com.azadkuu.yizhan.YizhanPlugin;
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.gui.GuiManager;
+import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Station;
 import com.azadkuu.yizhan.model.StationMode;
 import com.azadkuu.yizhan.service.ItemFilter;
+import com.azadkuu.yizhan.service.MailboxService;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.util.Msg;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -28,12 +33,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUB_COMMANDS = Arrays.asList(
-            "bind", "unbind", "route", "buffer", "open", "list", "info", "reload", "debugitem", "debugpdc",
-            "help");
+            "bind", "unbind", "route", "fee", "buffer", "open", "list", "info", "mail", "mailbox", "reload",
+            "debugitem", "debugpdc", "help");
 
     private final YizhanPlugin plugin;
     private final PluginConfig config;
@@ -41,15 +47,17 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
     private final TransportService transport;
     private final GuiManager guiManager;
     private final ItemFilter itemFilter;
+    private final MailboxService mailboxService;
 
     public YizhanCommand(YizhanPlugin plugin, PluginConfig config, Storage storage, TransportService transport,
-                         GuiManager guiManager, ItemFilter itemFilter) {
+                         GuiManager guiManager, ItemFilter itemFilter, MailboxService mailboxService) {
         this.plugin = plugin;
         this.config = config;
         this.storage = storage;
         this.transport = transport;
         this.guiManager = guiManager;
         this.itemFilter = itemFilter;
+        this.mailboxService = mailboxService;
     }
 
     @Override
@@ -62,10 +70,13 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "bind" -> bind(sender, args);
             case "unbind" -> unbind(sender, args);
             case "route" -> route(sender, args);
+            case "fee" -> fee(sender, args);
             case "buffer" -> buffer(sender, args);
             case "open" -> open(sender, args);
             case "list" -> list(sender);
             case "info" -> info(sender, args);
+            case "mail" -> mail(sender, args);
+            case "mailbox" -> mailbox(sender, args);
             case "debugitem" -> debugItem(sender);
             case "debugpdc" -> debugPdc(sender);
             case "reload" -> reload(sender);
@@ -151,7 +162,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 3) {
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz route <起点> <终点> [缓冲秒]");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz route <起点> <终点> [缓冲秒] [快递费]");
             Msg.send(sender, config.getPrefix(), "&7用法: &f/yz route remove <起点> <终点>");
             return;
         }
@@ -184,7 +195,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             Msg.send(sender, config.getPrefix(), "&c终点驿站 &f" + to + " &c不支持收货");
             return;
         }
-        Integer seconds = null;
+        Route existing = storage.getRoute(from, to);
+        Integer seconds = existing == null ? null : existing.getBufferSeconds();
         if (args.length >= 4) {
             try {
                 seconds = Integer.parseInt(args[3]);
@@ -197,15 +209,244 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                 return;
             }
         }
+        int fee = existing == null ? 0 : existing.getFee();
+        if (args.length >= 5) {
+            try {
+                fee = Integer.parseInt(args[4]);
+            } catch (NumberFormatException ex) {
+                Msg.send(sender, config.getPrefix(), "&c快递费必须是整数");
+                return;
+            }
+            if (fee < 0) {
+                Msg.send(sender, config.getPrefix(), "&c快递费不能为负数");
+                return;
+            }
+        }
         Route route = new Route();
         route.setFromStation(from);
         route.setToStation(to);
         route.setBufferSeconds(seconds);
         route.setEnabled(true);
+        route.setFee(fee);
         storage.saveRoute(route);
         int effective = transport.resolveBufferSeconds(route, fromStation);
         Msg.send(sender, config.getPrefix(), "&a已保存路由 &f" + from + " &7-> &f" + to
-                + " &a缓冲 &f" + guiManager.formatSeconds(effective));
+                + " &a缓冲 &f" + guiManager.formatSeconds(effective)
+                + " &a快递费 &f" + (fee > 0 ? fee + " 个货币物品" : "无"));
+    }
+
+    private void fee(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("yizhan.route")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        if (args.length < 4) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz fee <起点> <终点> <数量>");
+            return;
+        }
+        Route route = storage.getRoute(args[1], args[2]);
+        if (route == null) {
+            Msg.send(sender, config.getPrefix(), "&c路由 &f" + args[1] + " &7-> &f" + args[2] + " &c不存在");
+            return;
+        }
+        int fee;
+        try {
+            fee = Integer.parseInt(args[3]);
+        } catch (NumberFormatException ex) {
+            Msg.send(sender, config.getPrefix(), "&c快递费必须是整数");
+            return;
+        }
+        if (fee < 0) {
+            Msg.send(sender, config.getPrefix(), "&c快递费不能为负数");
+            return;
+        }
+        route.setFee(fee);
+        storage.saveRoute(route);
+        Msg.send(sender, config.getPrefix(), "&a路由 &f" + args[1] + " &7-> &f" + args[2]
+                + " &a的快递费已设为 &f" + (fee > 0 ? fee + " 个货币物品" : "无"));
+    }
+
+    private void mailbox(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("yizhan.admin")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        if (args.length < 2) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox bind &7绑定准星方块为全服邮箱");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox unbind &7解除绑定");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox info &7查看当前绑定");
+            return;
+        }
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "bind" -> {
+                if (!(sender instanceof Player player)) {
+                    Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+                    return;
+                }
+                Block block = player.getTargetBlockExact(6);
+                if (block == null) {
+                    Msg.send(sender, config.getPrefix(), "&c请把准星对准一个方块（6 格以内）");
+                    return;
+                }
+                guiManager.bindMailboxBlock(block);
+                Msg.send(sender, config.getPrefix(), "&a已把 &f" + block.getWorld().getName() + " "
+                        + block.getX() + "," + block.getY() + "," + block.getZ()
+                        + " &a设为全服邮箱方块，玩家右键即可打开自己的邮箱");
+            }
+            case "unbind" -> {
+                if (guiManager.unbindMailboxBlock()) {
+                    Msg.send(sender, config.getPrefix(), "&a已解除本服邮箱方块绑定");
+                } else {
+                    Msg.send(sender, config.getPrefix(), "&7本服尚未绑定邮箱方块");
+                }
+            }
+            case "info" -> {
+                MailboxBlock bound = guiManager.getMailboxBlock();
+                if (bound == null) {
+                    Msg.send(sender, config.getPrefix(), "&7本服尚未绑定邮箱方块，请用 &f/yz mailbox bind");
+                } else {
+                    Msg.send(sender, config.getPrefix(), "&a本服邮箱方块: &f" + bound.world() + " "
+                            + bound.x() + "," + bound.y() + "," + bound.z());
+                }
+            }
+            default -> Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox <bind|unbind|info>");
+        }
+    }
+
+    private void mail(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail send <玩家> [数量] &7把主手物品发到对方邮箱");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量>");
+            return;
+        }
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "send" -> mailSend(sender, args);
+            case "give" -> mailGive(sender, args);
+            default -> {
+                Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail send <玩家> [数量]");
+                Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量>");
+            }
+        }
+    }
+
+    private void mailSend(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("yizhan.mail.send")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        if (!(sender instanceof Player player)) {
+            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            return;
+        }
+        if (args.length < 3) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail send <玩家> [数量]");
+            return;
+        }
+        UUID target = resolveUuid(args[2]);
+        if (target == null) {
+            Msg.send(sender, config.getPrefix(), "&c找不到玩家 &f" + args[2]
+                    + " &c（可用玩家名或 UUID；从未进服的玩家请用 UUID）");
+            return;
+        }
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand == null || hand.getType().isAir()) {
+            Msg.send(sender, config.getPrefix(), "&c主手没有物品");
+            return;
+        }
+        int amount = hand.getAmount();
+        if (args.length >= 4) {
+            try {
+                amount = Integer.parseInt(args[3]);
+            } catch (NumberFormatException ex) {
+                Msg.send(sender, config.getPrefix(), "&c数量必须是整数");
+                return;
+            }
+            if (amount < 1) {
+                Msg.send(sender, config.getPrefix(), "&c数量必须大于 0");
+                return;
+            }
+            amount = Math.min(amount, hand.getAmount());
+        }
+        ItemStack send = hand.clone();
+        send.setAmount(amount);
+        int remain = hand.getAmount() - amount;
+        if (remain <= 0) {
+            player.getInventory().setItemInMainHand(null);
+        } else {
+            ItemStack back = hand.clone();
+            back.setAmount(remain);
+            player.getInventory().setItemInMainHand(back);
+        }
+        mailboxService.deliver(target, List.of(send),
+                "&a你收到了邮件: " + amount + " 个物品，来自 " + player.getName());
+        Msg.send(sender, config.getPrefix(), "&a已发送 &f" + amount + " &a个物品到 &f" + args[2] + " &a的邮箱");
+    }
+
+    private void mailGive(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("yizhan.mail.send")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        if (args.length < 5) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量>");
+            return;
+        }
+        UUID target = resolveUuid(args[2]);
+        if (target == null) {
+            Msg.send(sender, config.getPrefix(), "&c找不到玩家 &f" + args[2]
+                    + " &c（可用玩家名或 UUID；从未进服的玩家请用 UUID）");
+            return;
+        }
+        Material material = Material.matchMaterial(args[3]);
+        if (material == null || material.isAir()) {
+            Msg.send(sender, config.getPrefix(), "&c无效的物品ID: &f" + args[3]);
+            return;
+        }
+        int amount;
+        try {
+            amount = Integer.parseInt(args[4]);
+        } catch (NumberFormatException ex) {
+            Msg.send(sender, config.getPrefix(), "&c数量必须是整数");
+            return;
+        }
+        if (amount < 1) {
+            Msg.send(sender, config.getPrefix(), "&c数量必须大于 0");
+            return;
+        }
+        List<ItemStack> items = buildStacks(material, amount);
+        mailboxService.deliver(target, items,
+                "&a你收到了邮件: " + amount + " 个 " + material.name().toLowerCase(Locale.ROOT));
+        Msg.send(sender, config.getPrefix(), "&a已发送 &f" + amount + " &a个 &f"
+                + material.name().toLowerCase(Locale.ROOT) + " &a到 &f" + args[2] + " &a的邮箱");
+    }
+
+    @SuppressWarnings("deprecation")
+    private UUID resolveUuid(String input) {
+        try {
+            return UUID.fromString(input);
+        } catch (IllegalArgumentException ignored) {
+        }
+        Player online = Bukkit.getPlayerExact(input);
+        if (online != null) {
+            return online.getUniqueId();
+        }
+        OfflinePlayer offline = Bukkit.getOfflinePlayer(input);
+        if (offline.hasPlayedBefore() || offline.isOnline()) {
+            return offline.getUniqueId();
+        }
+        return null;
+    }
+
+    private List<ItemStack> buildStacks(Material material, int amount) {
+        List<ItemStack> out = new ArrayList<>();
+        int max = Math.max(1, material.getMaxStackSize());
+        int remaining = amount;
+        while (remaining > 0) {
+            int take = Math.min(remaining, max);
+            out.add(new ItemStack(material, take));
+            remaining -= take;
+        }
+        return out;
     }
 
     private void buffer(CommandSender sender, String[] args) {
@@ -395,12 +636,16 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&6驿站系统命令");
         Msg.send(sender, config.getPrefix(), "&f/yz bind <名称> <send|receive|both> &7绑定准星方块");
         Msg.send(sender, config.getPrefix(), "&f/yz unbind <名称> &7解绑驿站");
-        Msg.send(sender, config.getPrefix(), "&f/yz route <起点> <终点> [秒] &7建立单向路由");
+        Msg.send(sender, config.getPrefix(), "&f/yz route <起点> <终点> [秒] [快递费] &7建立单向路由");
         Msg.send(sender, config.getPrefix(), "&f/yz route remove <起点> <终点> &7删除路由");
+        Msg.send(sender, config.getPrefix(), "&f/yz fee <起点> <终点> <数量> &7设置路由快递费");
         Msg.send(sender, config.getPrefix(), "&f/yz buffer <驿站> <秒> &7设置缓冲时间");
         Msg.send(sender, config.getPrefix(), "&f/yz open <名称> &7远程打开驿站");
         Msg.send(sender, config.getPrefix(), "&f/yz list &7列出所有驿站");
         Msg.send(sender, config.getPrefix(), "&f/yz info <名称> &7查看驿站详情");
+        Msg.send(sender, config.getPrefix(), "&f/yz mailbox <bind|unbind|info> &7设置全服邮箱方块");
+        Msg.send(sender, config.getPrefix(), "&f/yz mail send <玩家> [数量] &7把主手物品发到对方邮箱");
+        Msg.send(sender, config.getPrefix(), "&f/yz mail give <玩家> <物品ID> <数量> &7发送指定物品");
         Msg.send(sender, config.getPrefix(), "&f/yz debugitem &7诊断主手物品（PDC 键、SNBT 与拦截判定）");
         Msg.send(sender, config.getPrefix(), "&f/yz debugpdc &7用 Bukkit API 给主手物品写测试 PDC 键");
         Msg.send(sender, config.getPrefix(), "&f/yz reload &7重载配置");
@@ -416,6 +661,35 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         for (Station station : storage.listStations()) {
             if (station.getId().toLowerCase(Locale.ROOT).startsWith(prefix)) {
                 out.add(station.getId());
+            }
+        }
+        return out;
+    }
+
+    private List<String> materialNames(String input) {
+        String prefix = input == null ? "" : input.toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (Material material : Material.values()) {
+            if (material.isAir() || !material.isItem()) {
+                continue;
+            }
+            String name = material.name().toLowerCase(Locale.ROOT);
+            if (name.startsWith(prefix)) {
+                out.add(name);
+                if (out.size() >= 50) {
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    private List<String> onlineNames(String input) {
+        String prefix = input == null ? "" : input.toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                out.add(player.getName());
             }
         }
         return out;
@@ -451,6 +725,15 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             if (sub.equals("unbind") || sub.equals("open") || sub.equals("info") || sub.equals("buffer")) {
                 return stationNames(args[1]);
             }
+            if (sub.equals("fee")) {
+                return stationNames(args[1]);
+            }
+            if (sub.equals("mailbox")) {
+                return filtered(Arrays.asList("bind", "unbind", "info"), args[1]);
+            }
+            if (sub.equals("mail")) {
+                return filtered(Arrays.asList("send", "give"), args[1]);
+            }
         }
         if (args.length == 3) {
             if (sub.equals("bind")) {
@@ -459,6 +742,12 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             if (sub.equals("route")) {
                 return stationNames(args[2]);
             }
+            if (sub.equals("fee")) {
+                return stationNames(args[2]);
+            }
+            if (sub.equals("mail")) {
+                return onlineNames(args[2]);
+            }
         }
         if (args.length == 4) {
             if (sub.equals("route") && !args[1].equalsIgnoreCase("remove")) {
@@ -466,6 +755,23 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             }
             if (sub.equals("route")) {
                 return stationNames(args[3]);
+            }
+            if (sub.equals("fee")) {
+                return filtered(Arrays.asList("0", "1", "5", "10"), args[3]);
+            }
+            if (sub.equals("mail") && args[1].equalsIgnoreCase("send")) {
+                return filtered(Arrays.asList("1", "8", "16", "32", "64"), args[3]);
+            }
+            if (sub.equals("mail")) {
+                return materialNames(args[3]);
+            }
+        }
+        if (args.length == 5) {
+            if (sub.equals("route")) {
+                return filtered(Arrays.asList("0", "1", "5", "10"), args[4]);
+            }
+            if (sub.equals("mail") && args[1].equalsIgnoreCase("give")) {
+                return filtered(Arrays.asList("1", "8", "16", "32", "64"), args[4]);
             }
         }
         return new ArrayList<>();

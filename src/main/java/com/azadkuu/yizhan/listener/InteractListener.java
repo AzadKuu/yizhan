@@ -35,6 +35,15 @@ public class InteractListener implements Listener {
             return;
         }
         Player player = event.getPlayer();
+        if (guiManager.isMailboxBlock(block)) {
+            event.setCancelled(true);
+            if (!player.hasPermission("yizhan.mail")) {
+                Msg.send(player, config.getPrefix(), "&c你没有权限打开邮箱");
+                return;
+            }
+            guiManager.openMailbox(player);
+            return;
+        }
         Station station = storage.getStationAt(config.getServerId(), block.getWorld().getName(),
                 block.getX(), block.getY(), block.getZ());
         if (station == null) {

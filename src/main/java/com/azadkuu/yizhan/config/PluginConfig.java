@@ -32,6 +32,12 @@ public class PluginConfig {
     private boolean dbUseSsl;
     private long dbConnectionTimeoutMs;
 
+    private int mailboxSize;
+    private boolean dailyRewardEnabled;
+    private String dailyRewardMessage;
+    private final List<DailyRewardItem> dailyRewardItems = new ArrayList<>();
+    private String currencyKey;
+
     private final Set<String> blockedNamespaces = new HashSet<>();
     private final Set<String> blockedKeys = new HashSet<>();
     private final Set<String> blockedMaterials = new HashSet<>();
@@ -106,6 +112,34 @@ public class PluginConfig {
                 blockedMaterials.add(m);
             }
         }
+
+        this.mailboxSize = clampSize(cfg.getInt("mailbox.size", 45));
+        this.dailyRewardEnabled = cfg.getBoolean("daily-reward.enabled", false);
+        this.dailyRewardMessage = cfg.getString("daily-reward.message", "&a每日奖励已发放到你的邮箱");
+        dailyRewardItems.clear();
+        for (Map<?, ?> entry : cfg.getMapList("daily-reward.items")) {
+            if (entry == null) {
+                continue;
+            }
+            Object rawMaterial = entry.get("material");
+            if (rawMaterial == null) {
+                continue;
+            }
+            int amount = 1;
+            Object rawAmount = entry.get("amount");
+            if (rawAmount instanceof Number number) {
+                amount = number.intValue();
+            } else if (rawAmount != null) {
+                try {
+                    amount = Integer.parseInt(String.valueOf(rawAmount).trim());
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            dailyRewardItems.add(new DailyRewardItem(String.valueOf(rawMaterial).trim(), Math.max(1, amount)));
+        }
+        String currency = cfg.getString("ship-fee.currency-key", "currency");
+        this.currencyKey = currency == null || currency.isBlank()
+                ? "currency" : currency.trim().toLowerCase(Locale.ROOT);
     }
 
     private int clampSize(int value) {
@@ -215,6 +249,26 @@ public class PluginConfig {
         return blockedMaterials;
     }
 
+    public int getMailboxSize() {
+        return mailboxSize;
+    }
+
+    public boolean isDailyRewardEnabled() {
+        return dailyRewardEnabled;
+    }
+
+    public String getDailyRewardMessage() {
+        return dailyRewardMessage;
+    }
+
+    public List<DailyRewardItem> getDailyRewardItems() {
+        return dailyRewardItems;
+    }
+
+    public String getCurrencyKey() {
+        return currencyKey;
+    }
+
     public List<String> describeFilter() {
         List<String> out = new ArrayList<>(blockedNamespaces);
         out.addAll(blockedKeys);
@@ -222,5 +276,8 @@ public class PluginConfig {
     }
 
     public record AllowedItem(String key, String value) {
+    }
+
+    public record DailyRewardItem(String material, int amount) {
     }
 }
