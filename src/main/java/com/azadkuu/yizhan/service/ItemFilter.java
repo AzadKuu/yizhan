@@ -55,9 +55,14 @@ public class ItemFilter {
 
         Set<String> namespaces = config.getBlockedNamespaces();
         Set<String> keys = config.getBlockedKeys();
+        Set<String> materials = config.getBlockedMaterials();
         Set<String> found = new LinkedHashSet<>();
         String reason = null;
-        if (!namespaces.isEmpty() || !keys.isEmpty()) {
+        if (!materials.isEmpty()
+                && materials.contains(item.getType().name().toLowerCase(Locale.ROOT))) {
+            reason = "命中原版材质=" + item.getType().name();
+        }
+        if (reason == null && (!namespaces.isEmpty() || !keys.isEmpty())) {
             for (NamespacedKey key : meta.getPersistentDataContainer().getKeys()) {
                 found.add(key.toString());
                 if (reason == null && namespaces.contains(key.getNamespace().toLowerCase(Locale.ROOT))) {

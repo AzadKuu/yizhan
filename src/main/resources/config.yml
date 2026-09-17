@@ -33,4 +33,5 @@ item-filter:
   #   - key: "nexo:item_id"
   #     value: "coin"
   allowed-items: []
+  blocked-materials: []          # 原版物品黑名单，按材质名，例如 ["paper","diamond_sword"]，可带 minecraft: 前缀
   block-custom-model-data: false

@@ -34,6 +34,7 @@ public class PluginConfig {
 
     private final Set<String> blockedNamespaces = new HashSet<>();
     private final Set<String> blockedKeys = new HashSet<>();
+    private final Set<String> blockedMaterials = new HashSet<>();
     private final List<AllowedItem> allowedItems = new ArrayList<>();
     private boolean blockCustomModelData;
 
@@ -91,6 +92,19 @@ public class PluginConfig {
                 continue;
             }
             allowedItems.add(new AllowedItem(key, String.valueOf(rawValue)));
+        }
+        blockedMaterials.clear();
+        for (String s : cfg.getStringList("item-filter.blocked-materials")) {
+            if (s == null || s.isBlank()) {
+                continue;
+            }
+            String m = s.trim().toLowerCase(Locale.ROOT);
+            if (m.startsWith("minecraft:")) {
+                m = m.substring("minecraft:".length());
+            }
+            if (!m.isEmpty()) {
+                blockedMaterials.add(m);
+            }
         }
     }
 
@@ -195,6 +209,10 @@ public class PluginConfig {
 
     public List<AllowedItem> getAllowedItems() {
         return allowedItems;
+    }
+
+    public Set<String> getBlockedMaterials() {
+        return blockedMaterials;
     }
 
     public List<String> describeFilter() {
