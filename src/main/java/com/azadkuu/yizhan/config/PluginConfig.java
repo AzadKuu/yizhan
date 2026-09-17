@@ -37,6 +37,7 @@ public class PluginConfig {
     private String dailyRewardMessage;
     private final List<DailyRewardItem> dailyRewardItems = new ArrayList<>();
     private String currencyKey;
+    private String currencyValue;
 
     private final Set<String> blockedNamespaces = new HashSet<>();
     private final Set<String> blockedKeys = new HashSet<>();
@@ -140,6 +141,9 @@ public class PluginConfig {
         String currency = cfg.getString("ship-fee.currency-key", "currency");
         this.currencyKey = currency == null || currency.isBlank()
                 ? "currency" : currency.trim().toLowerCase(Locale.ROOT);
+        String currencyValue = cfg.getString("ship-fee.currency-value", "");
+        this.currencyValue = currencyValue == null || currencyValue.isBlank()
+                ? null : currencyValue.trim();
     }
 
     private int clampSize(int value) {
@@ -267,6 +271,10 @@ public class PluginConfig {
 
     public String getCurrencyKey() {
         return currencyKey;
+    }
+
+    public String getCurrencyValue() {
+        return currencyValue;
     }
 
     public List<String> describeFilter() {

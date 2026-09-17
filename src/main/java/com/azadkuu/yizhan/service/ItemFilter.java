@@ -207,21 +207,69 @@ public class ItemFilter {
         if (currencyKey == null || currencyKey.isBlank()) {
             return false;
         }
+        String expected = config.getCurrencyValue();
         ItemMeta meta = item.getItemMeta();
         if (meta == null) {
             return false;
         }
-        for (NamespacedKey key : meta.getPersistentDataContainer().getKeys()) {
-            if (key.toString().equalsIgnoreCase(currencyKey) || key.getKey().equalsIgnoreCase(currencyKey)) {
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        for (NamespacedKey key : pdc.getKeys()) {
+            if (!matchesKeyName(key.toString(), currencyKey) && !matchesKeyName(key.getKey(), currencyKey)) {
+                continue;
+            }
+            if (expected == null) {
+                return true;
+            }
+            String value = readPdcValue(pdc, key);
+            if (value != null && value.equals(expected)) {
                 return true;
             }
         }
-        for (String key : parseCustomData(meta).keySet()) {
-            if (key.equalsIgnoreCase(currencyKey)) {
+        for (Map.Entry<String, String> entry : parseCustomData(meta).entrySet()) {
+            if (!matchesKeyName(entry.getKey(), currencyKey)) {
+                continue;
+            }
+            if (expected == null || expected.equals(entry.getValue())) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean matchesKeyName(String candidate, String currencyKey) {
+        if (candidate == null) {
+            return false;
+        }
+        if (candidate.equalsIgnoreCase(currencyKey)) {
+            return true;
+        }
+        int idx = candidate.indexOf(':');
+        return idx > 0 && candidate.substring(idx + 1).equalsIgnoreCase(currencyKey);
+    }
+
+    private String readPdcValue(PersistentDataContainer pdc, NamespacedKey key) {
+        try {
+            String value = pdc.get(key, PersistentDataType.STRING);
+            if (value != null) {
+                return value;
+            }
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            Integer value = pdc.get(key, PersistentDataType.INTEGER);
+            if (value != null) {
+                return String.valueOf(value);
+            }
+        } catch (RuntimeException ignored) {
+        }
+        try {
+            Double value = pdc.get(key, PersistentDataType.DOUBLE);
+            if (value != null) {
+                return String.valueOf(value);
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return null;
     }
 
     public Component nameComponent(ItemStack item) {

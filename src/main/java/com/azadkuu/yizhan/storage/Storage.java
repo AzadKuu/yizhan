@@ -69,6 +69,10 @@ public interface Storage extends AutoCloseable {
 
     boolean markDailyClaim(UUID player, String date);
 
+    Map<Integer, ItemStack> loadDailyRewardItems();
+
+    void saveDailyRewardItems(Map<Integer, ItemStack> items);
+
     MailboxBlock getMailboxBlock(String serverId);
 
     void saveMailboxBlock(MailboxBlock block);

@@ -33,13 +33,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 
 public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUB_COMMANDS = Arrays.asList(
-            "bind", "unbind", "route", "fee", "buffer", "open", "list", "info", "mail", "mailbox", "reload",
-            "debugitem", "debugpdc", "help");
+            "bind", "unbind", "route", "fee", "buffer", "open", "list", "info", "mail", "mailbox", "dailyreward",
+            "reload", "debugitem", "debugpdc", "help");
 
     private final YizhanPlugin plugin;
     private final PluginConfig config;
@@ -77,6 +78,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "info" -> info(sender, args);
             case "mail" -> mail(sender, args);
             case "mailbox" -> mailbox(sender, args);
+            case "dailyreward" -> dailyReward(sender, args);
             case "debugitem" -> debugItem(sender);
             case "debugpdc" -> debugPdc(sender);
             case "reload" -> reload(sender);
@@ -311,6 +313,149 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             }
             default -> Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox <bind|unbind|info>");
         }
+    }
+
+    private void dailyReward(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("yizhan.admin")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        if (args.length < 2) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz dailyreward add &7把主手物品登记为每日奖励");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz dailyreward list &7查看已登记的每日奖励");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz dailyreward remove <槽位> &7移除某项奖励");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz dailyreward clear &7清空全部登记");
+            return;
+        }
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "add" -> dailyRewardAdd(sender);
+            case "list" -> dailyRewardList(sender);
+            case "remove" -> dailyRewardRemove(sender, args);
+            case "clear" -> dailyRewardClear(sender);
+            default -> {
+                Msg.send(sender, config.getPrefix(), "&7用法: &f/yz dailyreward <add|list|remove|clear>");
+            }
+        }
+    }
+
+    private void dailyRewardAdd(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            return;
+        }
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand == null || hand.getType().isAir()) {
+            Msg.send(sender, config.getPrefix(), "&c主手没有物品，请手持要每天发放的物品再执行");
+            return;
+        }
+        ItemStack template = hand.clone();
+        String label = describeItem(template);
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                Map<Integer, ItemStack> items = storage.loadDailyRewardItems();
+                int slot = 0;
+                while (items.containsKey(slot)) {
+                    slot++;
+                }
+                items.put(slot, template);
+                storage.saveDailyRewardItems(items);
+                int total = items.size();
+                Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
+                        "&a已登记每日奖励 &f" + label + " &7(槽位 &f" + slot + "&7)，共 &f" + total + " &7项"));
+            } catch (RuntimeException ex) {
+                String message = ex.getMessage();
+                Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
+                        "&c登记失败: " + message));
+            }
+        });
+    }
+
+    private void dailyRewardList(CommandSender sender) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            Map<Integer, ItemStack> items;
+            try {
+                items = storage.loadDailyRewardItems();
+            } catch (RuntimeException ex) {
+                String message = ex.getMessage();
+                Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
+                        "&c读取失败: " + message));
+                return;
+            }
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                Msg.send(sender, config.getPrefix(), "&6每日奖励登记物品 &7(共 &f" + items.size() + " &7项)");
+                if (items.isEmpty()) {
+                    Msg.send(sender, config.getPrefix(), "&7暂无登记，手持物品执行 &f/yz dailyreward add");
+                } else {
+                    for (Map.Entry<Integer, ItemStack> entry : items.entrySet()) {
+                        Msg.send(sender, config.getPrefix(), "&f#" + entry.getKey() + " &7"
+                                + describeItem(entry.getValue()));
+                    }
+                }
+                Msg.send(sender, config.getPrefix(), "&7配置原版材质 &f" + config.getDailyRewardItems().size()
+                        + " &7项 &8| &7功能开关: " + (config.isDailyRewardEnabled() ? "&a开启" : "&c关闭"));
+            });
+        });
+    }
+
+    private void dailyRewardRemove(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz dailyreward remove <槽位>");
+            return;
+        }
+        int slot;
+        try {
+            slot = Integer.parseInt(args[2]);
+        } catch (NumberFormatException ex) {
+            Msg.send(sender, config.getPrefix(), "&c槽位必须是整数");
+            return;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                Map<Integer, ItemStack> items = storage.loadDailyRewardItems();
+                ItemStack removed = items.remove(slot);
+                if (removed == null) {
+                    Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
+                            "&c槽位 &f" + slot + " &c没有登记物品"));
+                    return;
+                }
+                storage.saveDailyRewardItems(items);
+                String label = describeItem(removed);
+                int total = items.size();
+                Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
+                        "&a已移除 &f" + label + " &7(槽位 &f" + slot + "&7)，剩余 &f" + total + " &7项"));
+            } catch (RuntimeException ex) {
+                String message = ex.getMessage();
+                Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
+                        "&c移除失败: " + message));
+            }
+        });
+    }
+
+    private void dailyRewardClear(CommandSender sender) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                storage.saveDailyRewardItems(new TreeMap<>());
+                Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
+                        "&a已清空全部登记的每日奖励物品"));
+            } catch (RuntimeException ex) {
+                String message = ex.getMessage();
+                Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
+                        "&c清空失败: " + message));
+            }
+        });
+    }
+
+    private String describeItem(ItemStack item) {
+        StringBuilder sb = new StringBuilder(item.getType().name().toLowerCase(Locale.ROOT));
+        sb.append(" x").append(item.getAmount());
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null && meta.hasDisplayName()) {
+            Component display = meta.displayName();
+            if (display != null) {
+                sb.append(" (").append(PlainTextComponentSerializer.plainText().serialize(display)).append(")");
+            }
+        }
+        return sb.toString();
     }
 
     private void mail(CommandSender sender, String[] args) {
@@ -646,6 +791,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&f/yz mailbox <bind|unbind|info> &7设置全服邮箱方块");
         Msg.send(sender, config.getPrefix(), "&f/yz mail send <玩家> [数量] &7把主手物品发到对方邮箱");
         Msg.send(sender, config.getPrefix(), "&f/yz mail give <玩家> <物品ID> <数量> &7发送指定物品");
+        Msg.send(sender, config.getPrefix(), "&f/yz dailyreward add &7把主手物品登记为每日奖励（支持自定义物品）");
+        Msg.send(sender, config.getPrefix(), "&f/yz dailyreward <list|remove|clear> &7管理登记的每日奖励");
         Msg.send(sender, config.getPrefix(), "&f/yz debugitem &7诊断主手物品（PDC 键、SNBT 与拦截判定）");
         Msg.send(sender, config.getPrefix(), "&f/yz debugpdc &7用 Bukkit API 给主手物品写测试 PDC 键");
         Msg.send(sender, config.getPrefix(), "&f/yz reload &7重载配置");
@@ -734,6 +881,9 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             if (sub.equals("mail")) {
                 return filtered(Arrays.asList("send", "give"), args[1]);
             }
+            if (sub.equals("dailyreward")) {
+                return filtered(Arrays.asList("add", "list", "remove", "clear"), args[1]);
+            }
         }
         if (args.length == 3) {
             if (sub.equals("bind")) {
@@ -747,6 +897,9 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             }
             if (sub.equals("mail")) {
                 return onlineNames(args[2]);
+            }
+            if (sub.equals("dailyreward") && args[1].equalsIgnoreCase("remove")) {
+                return filtered(Arrays.asList("0", "1", "2", "3", "4", "5"), args[2]);
             }
         }
         if (args.length == 4) {

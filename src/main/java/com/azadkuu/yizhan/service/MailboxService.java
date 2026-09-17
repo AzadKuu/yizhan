@@ -50,17 +50,17 @@ public class MailboxService {
     }
 
     public void grantDailyReward(Player player) {
-        if (!config.isDailyRewardEnabled() || config.getDailyRewardItems().isEmpty()) {
+        if (!config.isDailyRewardEnabled()) {
             return;
         }
         UUID uuid = player.getUniqueId();
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                if (!storage.markDailyClaim(uuid, LocalDate.now().format(DATE_FORMAT))) {
-                    return;
-                }
                 List<ItemStack> items = buildDailyItems();
                 if (items.isEmpty()) {
+                    return;
+                }
+                if (!storage.markDailyClaim(uuid, LocalDate.now().format(DATE_FORMAT))) {
                     return;
                 }
                 List<ItemStack> leftover = storage.depositToMailbox(uuid, items, config.getMailboxSize());
@@ -88,6 +88,12 @@ public class MailboxService {
 
     private List<ItemStack> buildDailyItems() {
         List<ItemStack> items = new ArrayList<>();
+        for (ItemStack template : storage.loadDailyRewardItems().values()) {
+            if (template == null || template.getType().isAir()) {
+                continue;
+            }
+            items.add(template.clone());
+        }
         for (PluginConfig.DailyRewardItem entry : config.getDailyRewardItems()) {
             Material material = Material.matchMaterial(entry.material());
             if (material == null || material.isAir()) {

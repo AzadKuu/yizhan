@@ -160,6 +160,12 @@ public class MysqlStorage implements Storage {
                         + "x INT NOT NULL, y INT NOT NULL, z INT NOT NULL,"
                         + "created_at BIGINT NOT NULL,"
                         + "PRIMARY KEY (server_id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "daily_rewards ("
+                        + "slot INT NOT NULL,"
+                        + "item_data LONGBLOB NOT NULL,"
+                        + "PRIMARY KEY (slot)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         };
         try (Connection c = conn(); Statement st = c.createStatement()) {
@@ -1001,6 +1007,61 @@ public class MysqlStorage implements Storage {
             }
         } catch (SQLException ex) {
             throw new StorageException("markDailyClaim failed", ex);
+        }
+    }
+
+    @Override
+    public Map<Integer, ItemStack> loadDailyRewardItems() {
+        Map<Integer, ItemStack> out = new TreeMap<>();
+        String sql = "SELECT slot, item_data FROM " + prefix + "daily_rewards ORDER BY slot";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ItemStack item = ItemSerializer.deserialize(rs.getBytes(2));
+                    if (item != null && !item.getType().isAir()) {
+                        out.put(rs.getInt(1), item);
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("loadDailyRewardItems failed", ex);
+        }
+        return out;
+    }
+
+    @Override
+    public void saveDailyRewardItems(Map<Integer, ItemStack> items) {
+        try (Connection c = conn()) {
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement ps = c.prepareStatement("DELETE FROM " + prefix + "daily_rewards")) {
+                    ps.executeUpdate();
+                }
+                try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix
+                        + "daily_rewards (slot, item_data) VALUES (?,?)")) {
+                    for (Map.Entry<Integer, ItemStack> entry : items.entrySet()) {
+                        ItemStack item = entry.getValue();
+                        if (item == null || item.getType().isAir()) {
+                            continue;
+                        }
+                        ps.setInt(1, entry.getKey());
+                        ps.setBytes(2, ItemSerializer.serialize(item));
+                        ps.addBatch();
+                    }
+                    ps.executeBatch();
+                }
+                c.commit();
+            } catch (SQLException ex) {
+                c.rollback();
+                throw ex;
+            } finally {
+                try {
+                    c.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("saveDailyRewardItems failed", ex);
         }
     }
 

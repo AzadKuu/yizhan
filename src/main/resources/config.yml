@@ -40,6 +40,8 @@ mailbox:
 daily-reward:
   enabled: false                 # 每天首次登录时自动投递到玩家邮箱（离线期间不补发）
   message: "&a每日奖励已发放到你的邮箱"
+  # 原版物品奖励：按材质名配置。自定义物品（Nexo/ItemsAdder）无法用材质名描述，
+  # 请用 /yz dailyreward add 手持物品登记，两种来源的奖励会叠加发放。
   # 示例：
   # items:
   #   - material: "diamond"
@@ -48,3 +50,7 @@ daily-reward:
 ship-fee:
   # 快递费货币的识别键：物品的 PDC / custom_data 键名包含它即视为货币
   currency-key: "currency"
+  # 货币的值：留空表示只按键名判定（任何带该键的物品都算货币）；
+  # 填写后必须键和值都匹配（Nexo 物品共用键名、靠值区分，此时必须填值）。
+  # 用 /yz debugitem 查看手持货币物品的实际键值。
+  currency-value: ""
