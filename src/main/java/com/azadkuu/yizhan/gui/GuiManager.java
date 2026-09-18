@@ -223,6 +223,8 @@ public class GuiManager {
                 inventory.setItem(slot, entry.getValue());
             }
         }
+        holder.setOriginalSlots(stored.keySet());
+        holder.setPendingCount(storage.countMailboxOverflow(uuid));
         renderMailbox(holder);
         openMailboxes.put(uuid, holder);
         player.openInventory(inventory);
@@ -244,6 +246,16 @@ public class GuiManager {
         inventory.setItem(mailSlotInfo(items), button(Material.PAPER, "&f我的邮箱",
                 "&7已用槽位: &f" + used + "/" + items,
                 "&7这是你自己的邮箱，别人看不到"));
+        int pending = holder.getPendingCount();
+        if (pending > 0) {
+            inventory.setItem(mailSlotReclaim(items), button(Material.ENDER_CHEST, "&6重新领取邮件",
+                    "&7待领取: &f" + pending + " 件",
+                    "&7邮箱满时收到的邮件会暂存在这里",
+                    "&7清理出空位后点击补入邮箱"));
+        } else {
+            inventory.setItem(mailSlotReclaim(items), button(Material.GRAY_DYE, "&7暂无待领取邮件",
+                    "&7邮箱满时收到的邮件会暂存在这里"));
+        }
     }
 
     public static int mailSlotClose(int items) {
@@ -252,6 +264,10 @@ public class GuiManager {
 
     public static int mailSlotTakeAll(int items) {
         return items + 4;
+    }
+
+    public static int mailSlotReclaim(int items) {
+        return items + 6;
     }
 
     public static int mailSlotInfo(int items) {

@@ -360,8 +360,9 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                 items.put(slot, template);
                 storage.saveDailyRewardItems(items);
                 int total = items.size();
+                int assignedSlot = slot;
                 Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),
-                        "&a已登记每日奖励 &f" + label + " &7(槽位 &f" + slot + "&7)，共 &f" + total + " &7项"));
+                        "&a已登记每日奖励 &f" + label + " &7(槽位 &f" + assignedSlot + "&7)，共 &f" + total + " &7项"));
             } catch (RuntimeException ex) {
                 String message = ex.getMessage();
                 Bukkit.getScheduler().runTask(plugin, () -> Msg.send(sender, config.getPrefix(),

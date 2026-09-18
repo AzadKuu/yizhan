@@ -46,4 +46,18 @@ public class NotificationService {
                 .replace("%id%", Long.toString(id))
                 .replace("%station%", station == null ? "" : station);
     }
+
+    public String shipWaiting(long id, String station) {
+        return config.getShipWaitingMessage()
+                .replace("%id%", Long.toString(id))
+                .replace("%station%", station == null ? "" : station);
+    }
+
+    public String shipReturned(long id, String station) {
+        int minutes = Math.max(1, config.getShipmentReturnAfterSeconds() / 60);
+        return config.getShipReturnedMessage()
+                .replace("%id%", Long.toString(id))
+                .replace("%station%", station == null ? "" : station)
+                .replace("%minutes%", Integer.toString(minutes));
+    }
 }

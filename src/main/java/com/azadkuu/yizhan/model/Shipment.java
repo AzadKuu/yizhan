@@ -18,6 +18,7 @@ public class Shipment {
     private Instant arriveAt;
     private UUID owner;
     private int version;
+    private Instant fullSince;
     private Map<Integer, ItemStack> items = new LinkedHashMap<>();
 
     public long getId() {
@@ -90,6 +91,14 @@ public class Shipment {
 
     public void setVersion(int version) {
         this.version = version;
+    }
+
+    public Instant getFullSince() {
+        return fullSince;
+    }
+
+    public void setFullSince(Instant fullSince) {
+        this.fullSince = fullSince;
     }
 
     public Map<Integer, ItemStack> getItems() {

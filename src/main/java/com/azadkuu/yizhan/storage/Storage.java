@@ -1,5 +1,6 @@
 package com.azadkuu.yizhan.storage;
 
+import com.azadkuu.yizhan.model.DeliveryResult;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Notification;
 import com.azadkuu.yizhan.model.Route;
@@ -8,6 +9,7 @@ import com.azadkuu.yizhan.model.Station;
 import org.bukkit.inventory.ItemStack;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -49,9 +51,19 @@ public interface Storage extends AutoCloseable {
 
     void loadShipmentItems(Shipment shipment);
 
-    boolean deliverShipment(long shipmentId);
+    DeliveryResult deliverShipment(long shipmentId);
+
+    boolean markShipmentFull(long shipmentId);
+
+    List<Shipment> listShipmentsStuckFull(int limit, long fullBeforeMillis);
+
+    boolean returnShipment(long shipmentId, int mailboxSize);
 
     boolean cancelShipment(long shipmentId);
+
+    int countStationStacks(String stationId);
+
+    int countInTransitStacks(String toStation);
 
     Map<Integer, ItemStack> loadStationItems(String stationId);
 
@@ -63,9 +75,13 @@ public interface Storage extends AutoCloseable {
 
     Map<Integer, ItemStack> loadMailboxItems(UUID player);
 
-    void saveMailboxItems(UUID player, Map<Integer, ItemStack> items);
+    void saveMailboxItems(UUID player, Map<Integer, ItemStack> items, Collection<Integer> clearSlots);
 
-    List<ItemStack> depositToMailbox(UUID player, List<ItemStack> items, int size);
+    int depositToMailbox(UUID player, List<ItemStack> items, int size);
+
+    int countMailboxOverflow(UUID player);
+
+    int reclaimMailboxOverflow(UUID player, int size);
 
     boolean markDailyClaim(UUID player, String date);
 

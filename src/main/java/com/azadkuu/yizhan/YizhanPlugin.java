@@ -71,7 +71,7 @@ public final class YizhanPlugin extends JavaPlugin {
         long interval = 20L * config.getPollIntervalSeconds();
         this.deliveryTaskId = getServer().getScheduler()
                 .runTaskTimerAsynchronously(this,
-                        new DeliveryTask(this, storage, guiManager, notificationService, 64), interval, interval)
+                        new DeliveryTask(this, config, storage, guiManager, notificationService, 64), interval, interval)
                 .getTaskId();
 
         getLogger().info("Yizhan 已启用, server-id=" + config.getServerId()

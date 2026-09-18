@@ -1,6 +1,7 @@
 package com.azadkuu.yizhan.storage;
 
 import com.azadkuu.yizhan.config.PluginConfig;
+import com.azadkuu.yizhan.model.DeliveryResult;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Notification;
 import com.azadkuu.yizhan.model.Route;
@@ -21,6 +22,7 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -166,6 +168,15 @@ public class MysqlStorage implements Storage {
                         + "slot INT NOT NULL,"
                         + "item_data LONGBLOB NOT NULL,"
                         + "PRIMARY KEY (slot)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "mailbox_overflow ("
+                        + "id BIGINT NOT NULL AUTO_INCREMENT,"
+                        + "player_uuid VARCHAR(36) NOT NULL,"
+                        + "item_data LONGBLOB NOT NULL,"
+                        + "created_at BIGINT NOT NULL,"
+                        + "PRIMARY KEY (id),"
+                        + "KEY idx_yz_overflow (player_uuid, id)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         };
         try (Connection c = conn(); Statement st = c.createStatement()) {
@@ -173,6 +184,7 @@ public class MysqlStorage implements Storage {
                 st.executeUpdate(sql);
             }
             ensureColumn(c, prefix + "routes", "fee", "fee INT NOT NULL DEFAULT 0");
+            ensureColumn(c, prefix + "shipments", "full_since", "full_since BIGINT NULL");
         }
     }
 
@@ -226,6 +238,10 @@ public class MysqlStorage implements Storage {
         String owner = rs.getString("owner_uuid");
         shipment.setOwner(owner == null ? null : UUID.fromString(owner));
         shipment.setVersion(rs.getInt("version"));
+        long fullSince = rs.getLong("full_since");
+        if (!rs.wasNull()) {
+            shipment.setFullSince(Instant.ofEpochMilli(fullSince));
+        }
         return shipment;
     }
 
@@ -620,7 +636,7 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
-    public boolean deliverShipment(long shipmentId) {
+    public DeliveryResult deliverShipment(long shipmentId) {
         try (Connection c = conn()) {
             c.setAutoCommit(false);
             try {
@@ -630,7 +646,7 @@ public class MysqlStorage implements Storage {
                     try (ResultSet rs = ps.executeQuery()) {
                         if (!rs.next()) {
                             c.rollback();
-                            return false;
+                            return DeliveryResult.SKIPPED;
                         }
                         toStation = rs.getString(1);
                     }
@@ -638,29 +654,113 @@ public class MysqlStorage implements Storage {
                 Station station = getStation(c, toStation);
                 if (station == null) {
                     c.rollback();
-                    return false;
+                    return DeliveryResult.SKIPPED;
                 }
                 Map<Integer, byte[]> items = loadShipmentItemBytes(c, shipmentId);
                 if (items.isEmpty()) {
                     c.rollback();
-                    return false;
+                    return DeliveryResult.SKIPPED;
                 }
                 List<Integer> free = freeSlots(station.getSize(), loadOccupiedSlots(c, toStation));
                 if (free.size() < items.size()) {
                     c.rollback();
-                    return false;
+                    return DeliveryResult.WAITING_FULL;
                 }
                 insertStationItems(c, toStation, free, items);
                 int affected;
-                try (PreparedStatement ps = c.prepareStatement("UPDATE " + prefix + "shipments SET status='DELIVERED', version=version+1 WHERE id=? AND status='IN_TRANSIT'")) {
+                try (PreparedStatement ps = c.prepareStatement("UPDATE " + prefix
+                        + "shipments SET status='DELIVERED', full_since=NULL, version=version+1 WHERE id=? AND status='IN_TRANSIT'")) {
                     ps.setLong(1, shipmentId);
                     affected = ps.executeUpdate();
                 }
                 if (affected == 0) {
                     c.rollback();
-                    return false;
+                    return DeliveryResult.SKIPPED;
                 }
                 touchStationVersion(c, toStation);
+                c.commit();
+                return DeliveryResult.DELIVERED;
+            } catch (SQLException ex) {
+                c.rollback();
+                throw ex;
+            } finally {
+                try {
+                    c.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("deliverShipment failed", ex);
+        }
+    }
+
+    @Override
+    public boolean markShipmentFull(long shipmentId) {
+        try (Connection c = conn();
+             PreparedStatement ps = c.prepareStatement("UPDATE " + prefix
+                     + "shipments SET full_since=? WHERE id=? AND status='IN_TRANSIT' AND full_since IS NULL")) {
+            ps.setLong(1, System.currentTimeMillis());
+            ps.setLong(2, shipmentId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            throw new StorageException("markShipmentFull failed", ex);
+        }
+    }
+
+    @Override
+    public List<Shipment> listShipmentsStuckFull(int limit, long fullBeforeMillis) {
+        List<Shipment> out = new ArrayList<>();
+        String sql = "SELECT * FROM " + prefix + "shipments WHERE status='IN_TRANSIT' "
+                + "AND full_since IS NOT NULL AND full_since<=? ORDER BY full_since ASC LIMIT ?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, fullBeforeMillis);
+            ps.setInt(2, limit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(mapShipment(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("listShipmentsStuckFull failed", ex);
+        }
+        return out;
+    }
+
+    @Override
+    public boolean returnShipment(long shipmentId, int mailboxSize) {
+        try (Connection c = conn()) {
+            c.setAutoCommit(false);
+            try {
+                UUID owner;
+                try (PreparedStatement ps = c.prepareStatement("SELECT owner_uuid FROM " + prefix
+                        + "shipments WHERE id=? AND status='IN_TRANSIT' FOR UPDATE")) {
+                    ps.setLong(1, shipmentId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            c.rollback();
+                            return false;
+                        }
+                        String raw = rs.getString(1);
+                        owner = raw == null ? null : UUID.fromString(raw);
+                    }
+                }
+                Map<Integer, byte[]> items = loadShipmentItemBytes(c, shipmentId);
+                if (owner != null && !items.isEmpty()) {
+                    List<ItemStack> stacks = new ArrayList<>();
+                    for (byte[] data : items.values()) {
+                        ItemStack item = ItemSerializer.deserialize(data);
+                        if (item != null && !item.getType().isAir()) {
+                            stacks.add(item);
+                        }
+                    }
+                    depositToMailboxInternal(c, owner, stacks, mailboxSize);
+                }
+                try (PreparedStatement ps = c.prepareStatement("UPDATE " + prefix
+                        + "shipments SET status='RETURNED', full_since=NULL, version=version+1 WHERE id=? AND status='IN_TRANSIT'")) {
+                    ps.setLong(1, shipmentId);
+                    ps.executeUpdate();
+                }
+                deleteShipmentItems(c, shipmentId);
                 c.commit();
                 return true;
             } catch (SQLException ex) {
@@ -673,7 +773,37 @@ public class MysqlStorage implements Storage {
                 }
             }
         } catch (SQLException ex) {
-            throw new StorageException("deliverShipment failed", ex);
+            throw new StorageException("returnShipment failed", ex);
+        }
+    }
+
+    private void deleteShipmentItems(Connection c, long shipmentId) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("DELETE FROM " + prefix + "shipment_items WHERE shipment_id=?")) {
+            ps.setLong(1, shipmentId);
+            ps.executeUpdate();
+        }
+    }
+
+    @Override
+    public int countStationStacks(String stationId) {
+        return countStacks("SELECT COUNT(*) FROM " + prefix + "station_items WHERE station_id=?", stationId);
+    }
+
+    @Override
+    public int countInTransitStacks(String toStation) {
+        String sql = "SELECT COUNT(*) FROM " + prefix + "shipment_items i JOIN " + prefix
+                + "shipments s ON s.id=i.shipment_id WHERE s.status='IN_TRANSIT' AND s.to_station=?";
+        return countStacks(sql, toStation);
+    }
+
+    private int countStacks(String sql, String value) {
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, value);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("countStacks failed", ex);
         }
     }
 
@@ -896,16 +1026,30 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
-    public void saveMailboxItems(UUID player, Map<Integer, ItemStack> items) {
+    public void saveMailboxItems(UUID player, Map<Integer, ItemStack> items, Collection<Integer> clearSlots) {
         try (Connection c = conn()) {
             c.setAutoCommit(false);
             try {
-                try (PreparedStatement ps = c.prepareStatement("DELETE FROM " + prefix + "mailbox_items WHERE player_uuid=?")) {
-                    ps.setString(1, player.toString());
-                    ps.executeUpdate();
+                if (clearSlots != null && !clearSlots.isEmpty()) {
+                    StringBuilder sql = new StringBuilder("DELETE FROM " + prefix
+                            + "mailbox_items WHERE player_uuid=? AND slot IN (");
+                    int index = 0;
+                    for (Integer ignored : clearSlots) {
+                        sql.append(index++ == 0 ? "?" : ",?");
+                    }
+                    sql.append(")");
+                    try (PreparedStatement ps = c.prepareStatement(sql.toString())) {
+                        ps.setString(1, player.toString());
+                        int i = 2;
+                        for (Integer slot : clearSlots) {
+                            ps.setInt(i++, slot);
+                        }
+                        ps.executeUpdate();
+                    }
                 }
                 try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix
-                        + "mailbox_items (player_uuid, slot, item_data) VALUES (?,?,?)")) {
+                        + "mailbox_items (player_uuid, slot, item_data) VALUES (?,?,?) "
+                        + "ON DUPLICATE KEY UPDATE item_data=VALUES(item_data)")) {
                     for (Map.Entry<Integer, ItemStack> entry : items.entrySet()) {
                         ItemStack item = entry.getValue();
                         if (item == null || item.getType().isAir()) {
@@ -934,8 +1078,90 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
-    public List<ItemStack> depositToMailbox(UUID player, List<ItemStack> items, int size) {
+    public int depositToMailbox(UUID player, List<ItemStack> items, int size) {
+        try (Connection c = conn()) {
+            c.setAutoCommit(false);
+            try {
+                int stashed = depositToMailboxInternal(c, player, items, size);
+                c.commit();
+                return stashed;
+            } catch (SQLException ex) {
+                c.rollback();
+                throw ex;
+            } finally {
+                try {
+                    c.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("depositToMailbox failed", ex);
+        }
+    }
+
+    private int depositToMailboxInternal(Connection c, UUID player, List<ItemStack> items, int size) throws SQLException {
+        Set<Integer> occupied = new HashSet<>();
+        try (PreparedStatement ps = c.prepareStatement("SELECT slot FROM " + prefix
+                + "mailbox_items WHERE player_uuid=? FOR UPDATE")) {
+            ps.setString(1, player.toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    occupied.add(rs.getInt(1));
+                }
+            }
+        }
+        List<Integer> free = freeSlots(size, occupied);
         List<ItemStack> leftover = new ArrayList<>();
+        try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix
+                + "mailbox_items (player_uuid, slot, item_data) VALUES (?,?,?) "
+                + "ON DUPLICATE KEY UPDATE item_data=VALUES(item_data)")) {
+            int index = 0;
+            for (ItemStack item : items) {
+                if (item == null || item.getType().isAir()) {
+                    continue;
+                }
+                if (index >= free.size()) {
+                    leftover.add(item);
+                    continue;
+                }
+                ps.setString(1, player.toString());
+                ps.setInt(2, free.get(index++));
+                ps.setBytes(3, ItemSerializer.serialize(item));
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+        if (leftover.isEmpty()) {
+            return 0;
+        }
+        stashOverflowInternal(c, player, leftover);
+        return leftover.size();
+    }
+
+    private void stashOverflowInternal(Connection c, UUID player, List<ItemStack> items) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix
+                + "mailbox_overflow (player_uuid, item_data, created_at) VALUES (?,?,?)")) {
+            long now = System.currentTimeMillis();
+            for (ItemStack item : items) {
+                if (item == null || item.getType().isAir()) {
+                    continue;
+                }
+                ps.setString(1, player.toString());
+                ps.setBytes(2, ItemSerializer.serialize(item));
+                ps.setLong(3, now);
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        }
+    }
+
+    @Override
+    public int countMailboxOverflow(UUID player) {
+        return countStacks("SELECT COUNT(*) FROM " + prefix + "mailbox_overflow WHERE player_uuid=?", player.toString());
+    }
+
+    @Override
+    public int reclaimMailboxOverflow(UUID player, int size) {
         try (Connection c = conn()) {
             c.setAutoCommit(false);
             try {
@@ -950,26 +1176,56 @@ public class MysqlStorage implements Storage {
                     }
                 }
                 List<Integer> free = freeSlots(size, occupied);
+                if (free.isEmpty()) {
+                    c.rollback();
+                    return 0;
+                }
+                Map<Long, byte[]> pending = new LinkedHashMap<>();
+                try (PreparedStatement ps = c.prepareStatement("SELECT id, item_data FROM " + prefix
+                        + "mailbox_overflow WHERE player_uuid=? ORDER BY id LIMIT 400")) {
+                    ps.setString(1, player.toString());
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            pending.put(rs.getLong(1), rs.getBytes(2));
+                        }
+                    }
+                }
+                if (pending.isEmpty()) {
+                    c.rollback();
+                    return 0;
+                }
+                List<Long> moved = new ArrayList<>();
                 try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix
                         + "mailbox_items (player_uuid, slot, item_data) VALUES (?,?,?) "
                         + "ON DUPLICATE KEY UPDATE item_data=VALUES(item_data)")) {
                     int index = 0;
-                    for (ItemStack item : items) {
-                        if (item == null || item.getType().isAir()) {
-                            continue;
-                        }
+                    for (Map.Entry<Long, byte[]> entry : pending.entrySet()) {
                         if (index >= free.size()) {
-                            leftover.add(item);
-                            continue;
+                            break;
                         }
                         ps.setString(1, player.toString());
                         ps.setInt(2, free.get(index++));
-                        ps.setBytes(3, ItemSerializer.serialize(item));
+                        ps.setBytes(3, entry.getValue());
                         ps.addBatch();
+                        moved.add(entry.getKey());
                     }
                     ps.executeBatch();
                 }
+                if (!moved.isEmpty()) {
+                    StringBuilder sql = new StringBuilder("DELETE FROM " + prefix + "mailbox_overflow WHERE id IN (");
+                    for (int i = 0; i < moved.size(); i++) {
+                        sql.append(i == 0 ? "?" : ",?");
+                    }
+                    sql.append(")");
+                    try (PreparedStatement ps = c.prepareStatement(sql.toString())) {
+                        for (int i = 0; i < moved.size(); i++) {
+                            ps.setLong(i + 1, moved.get(i));
+                        }
+                        ps.executeUpdate();
+                    }
+                }
                 c.commit();
+                return moved.size();
             } catch (SQLException ex) {
                 c.rollback();
                 throw ex;
@@ -980,9 +1236,8 @@ public class MysqlStorage implements Storage {
                 }
             }
         } catch (SQLException ex) {
-            throw new StorageException("depositToMailbox failed", ex);
+            throw new StorageException("reclaimMailboxOverflow failed", ex);
         }
-        return leftover;
     }
 
     @Override

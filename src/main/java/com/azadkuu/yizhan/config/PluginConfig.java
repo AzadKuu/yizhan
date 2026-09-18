@@ -16,11 +16,14 @@ public class PluginConfig {
     private int pollIntervalSeconds;
     private int defaultBufferSeconds;
     private boolean allowCancelShipment;
+    private int shipmentReturnAfterSeconds;
     private int defaultStationSize;
     private int maxStationSize;
     private String prefix;
     private String shipStartMessage;
     private String shipArrivedMessage;
+    private String shipWaitingMessage;
+    private String shipReturnedMessage;
 
     private String dbHost;
     private int dbPort;
@@ -51,6 +54,7 @@ public class PluginConfig {
         this.pollIntervalSeconds = Math.max(1, cfg.getInt("poll-interval-seconds", 3));
         this.defaultBufferSeconds = Math.max(1, cfg.getInt("default-buffer-seconds", 300));
         this.allowCancelShipment = cfg.getBoolean("allow-cancel-shipment", false);
+        this.shipmentReturnAfterSeconds = Math.max(60, cfg.getInt("shipment.return-after-seconds", 600));
         this.defaultStationSize = clampSize(cfg.getInt("default-station-size", 27));
         this.maxStationSize = clampSize(cfg.getInt("max-station-size", 45));
         this.prefix = cfg.getString("language.prefix", "&8[&6驿站&8] &r");
@@ -58,6 +62,10 @@ public class PluginConfig {
                 "&a发货成功 &7#%id% &7目的地 &f%to% &7预计 &f%buffer%&7后到达");
         this.shipArrivedMessage = cfg.getString("messages.ship-arrived",
                 "&a你的包裹 &7#%id% &a已到达 &f%station% &a，请前往领取");
+        this.shipWaitingMessage = cfg.getString("messages.ship-waiting",
+                "&e目标驿站 &f%station% &e已满，包裹 &7#%id% &e正在等待空位，请提醒对方清理收件箱");
+        this.shipReturnedMessage = cfg.getString("messages.ship-returned",
+                "&c目标驿站 &f%station% &c已满超过 &f%minutes% &c分钟，包裹 &7#%id% &c已退回你的邮箱");
 
         this.dbHost = cfg.getString("database.host", "127.0.0.1");
         this.dbPort = cfg.getInt("database.port", 3306);
@@ -195,6 +203,18 @@ public class PluginConfig {
 
     public String getShipArrivedMessage() {
         return shipArrivedMessage;
+    }
+
+    public String getShipWaitingMessage() {
+        return shipWaitingMessage;
+    }
+
+    public String getShipReturnedMessage() {
+        return shipReturnedMessage;
+    }
+
+    public int getShipmentReturnAfterSeconds() {
+        return shipmentReturnAfterSeconds;
     }
 
     public String getDbHost() {

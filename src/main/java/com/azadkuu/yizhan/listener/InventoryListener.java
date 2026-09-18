@@ -6,6 +6,7 @@ import com.azadkuu.yizhan.gui.GuiManager;
 import com.azadkuu.yizhan.gui.MailboxHolder;
 import com.azadkuu.yizhan.gui.StationHolder;
 import com.azadkuu.yizhan.model.Route;
+import com.azadkuu.yizhan.model.Station;
 import com.azadkuu.yizhan.service.ItemFilter;
 import com.azadkuu.yizhan.service.NotificationService;
 import com.azadkuu.yizhan.service.TransportService;
@@ -25,7 +26,9 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 
 public class InventoryListener implements Listener {
@@ -168,6 +171,8 @@ public class InventoryListener implements Listener {
                 player.closeInventory();
             } else if (raw == GuiManager.mailSlotTakeAll(items)) {
                 claimAllMailbox(player, mailbox);
+            } else if (raw == GuiManager.mailSlotReclaim(items)) {
+                reclaimMailbox(player, mailbox);
             }
         }
     }
@@ -388,6 +393,31 @@ public class InventoryListener implements Listener {
             Msg.send(player, config.getPrefix(), "&7发货区是空的");
             return;
         }
+        Station target = storage.getStation(route.getToStation());
+        if (target == null) {
+            Msg.send(player, config.getPrefix(), "&c目的地驿站 &f" + route.getToStation() + " &c不存在");
+            return;
+        }
+        int capacity = target.getSize();
+        int need = items.size();
+        int occupied;
+        int pending;
+        try {
+            occupied = storage.countStationStacks(route.getToStation());
+            pending = storage.countInTransitStacks(route.getToStation());
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("检查目标驿站容量失败: " + ex.getMessage());
+            Msg.send(player, config.getPrefix(), "&c发货失败，请稍后重试");
+            return;
+        }
+        if (occupied + pending + need > capacity) {
+            int freeLeft = Math.max(0, capacity - occupied - pending);
+            Msg.send(player, config.getPrefix(), "&c目标驿站 &f" + route.getToStation()
+                    + " &c容量不足：剩余 &f" + freeLeft + " &c格，本次需要 &f" + need
+                    + " &c格（收件箱已用 &f" + occupied + " &c，在途 &f" + pending
+                    + " &c）。请先清理目标驿站收件箱");
+            return;
+        }
         long shipmentId;
         try {
             shipmentId = transport.ship(holder.getStation(), route, player.getUniqueId(), items);
@@ -461,6 +491,63 @@ public class InventoryListener implements Listener {
         }
     }
 
+    private void reclaimMailbox(Player player, MailboxHolder holder) {
+        int items = config.getMailboxSize();
+        Inventory inventory = holder.getInventory();
+        Map<Integer, ItemStack> snapshot = new TreeMap<>();
+        for (int i = 0; i < items; i++) {
+            ItemStack item = inventory.getItem(i);
+            if (item != null && !item.getType().isAir()) {
+                snapshot.put(i, item.clone());
+            }
+        }
+        UUID owner = holder.getOwner();
+        Set<Integer> clearSlots = new TreeSet<>(holder.getOriginalSlots());
+        clearSlots.removeAll(snapshot.keySet());
+        holder.setOriginalSlots(snapshot.keySet());
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            int moved;
+            int pending;
+            Map<Integer, ItemStack> reloaded;
+            try {
+                storage.saveMailboxItems(owner, snapshot, clearSlots);
+                moved = storage.reclaimMailboxOverflow(owner, items);
+                reloaded = storage.loadMailboxItems(owner);
+                pending = storage.countMailboxOverflow(owner);
+            } catch (RuntimeException ex) {
+                plugin.getLogger().warning("重新领取邮件失败: " + ex.getMessage());
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> Msg.send(player, config.getPrefix(), "&c重新领取失败，请稍后重试"));
+                return;
+            }
+            final int movedFinal = moved;
+            final int pendingFinal = pending;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (guiManager.getOpenMailbox(owner) != holder) {
+                    return;
+                }
+                for (int i = 0; i < items; i++) {
+                    inventory.setItem(i, null);
+                }
+                for (Map.Entry<Integer, ItemStack> entry : reloaded.entrySet()) {
+                    int slot = entry.getKey();
+                    if (slot >= 0 && slot < items) {
+                        inventory.setItem(slot, entry.getValue());
+                    }
+                }
+                holder.setPendingCount(pendingFinal);
+                guiManager.renderMailbox(holder);
+                player.updateInventory();
+                if (movedFinal > 0) {
+                    Msg.send(player, config.getPrefix(), "&a已补入 &f" + movedFinal + " &a件邮件"
+                            + (pendingFinal > 0 ? "&7，仍有 &f" + pendingFinal + " &7件待领取（邮箱已满）" : ""));
+                } else {
+                    Msg.send(player, config.getPrefix(), "&7没有可补入的邮件，请先清出邮箱空位");
+                }
+            });
+        });
+    }
+
     private void sendItemBlocked(Player player, ItemStack item, String suffix) {
         player.sendMessage(Msg.join(
                 Msg.component(config.getPrefix()),
@@ -500,9 +587,12 @@ public class InventoryListener implements Listener {
             snapshot.put(i, item.clone());
         }
         UUID owner = holder.getOwner();
+        Set<Integer> clearSlots = new TreeSet<>(holder.getOriginalSlots());
+        clearSlots.removeAll(snapshot.keySet());
+        holder.setOriginalSlots(snapshot.keySet());
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                storage.saveMailboxItems(owner, snapshot);
+                storage.saveMailboxItems(owner, snapshot, clearSlots);
             } catch (RuntimeException ex) {
                 plugin.getLogger().warning("保存邮箱失败: " + ex.getMessage());
             }
