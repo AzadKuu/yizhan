@@ -11,9 +11,9 @@ Paper 1.21.x 跨服物资运输插件。把物品从一个服务器的容器，�
 - **单向路由 + 缓冲时间**：`发送站 -> 接收站`，缓冲时间可按路由或按驿站配置
 - **MySQL 中继**：HikariCP 连接池，事务 + version 乐观锁 + 投递状态 CAS，多子服同时运行不会重复投递或复制物品
 - **非原版物品拦截**：按 `custom_data` / PersistentDataContainer 的命名空间做黑名单校验，默认拦截 Nexo、ItemsAdder 等自定义物品
-- **收件箱容量保护**：发货前预检「目标收件箱已占 + 在途包裹」是否会超容量，不足直接拦下并提示清理；发出后目标被塞满则先等待空位并通知发件人，超过 `shipment.return-after-seconds`（默认 600 秒）自动退回发件人邮箱，不会丢件
+- **收件箱容量保护**：发货前预检「目标收件箱已占 + 在途包裹」是否会超容量，不足直接拦下并提示清理；发出后目标被塞满则一直重试投递并通知发件人，超过 `shipment.discard-after-hours`（默认 24 小时）仍投不进则把物品暂存到丢弃仓库，管理员用 `/yz discarded` 领取，不会丢件
 - **邮箱暂存不丢件**：收件人邮箱满时，放不下的邮件进入待领取队列，清理邮箱后点邮箱界面的「重新领取」即可补入，不会消失
-- **发货与到货通知**：发货、投递完成、目标满等待、超时退回都会给相关玩家发消息；玩家不在线时消息入库，下次在任意子服上线自动补发
+- **发货与到货通知**：发货、投递完成、目标满等待、超时丢弃都会给相关玩家发消息；玩家不在线时消息入库，下次在任意子服上线自动补发
 - **玩家邮箱**：全服共用一个邮箱方块（管理员用 `/yizhan mailbox bind` 绑定），玩家右键即可打开自己独立的邮箱，物品按 UUID 存库，天然跨服
 - **跨服发奖**：`/yizhan mail send` / `/yizhan mail give` 可把物品直接投递到任意玩家（含离线、含其他子服）的邮箱
 - **每日奖励**：玩家每天首次登录时，自动把奖励投递到自己的邮箱（原版材质 + 登记模板物品两种来源叠加）
@@ -109,6 +109,7 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | `/yizhan dailyreward list` | 查看已登记的每日奖励模板 |
 | `/yizhan dailyreward remove <槽位>` | 移除某个登记的每日奖励模板 |
 | `/yizhan dailyreward clear` | 清空全部登记的每日奖励模板 |
+| `/yizhan discarded` | 打开丢弃物品仓库 GUI，取出投递超时被暂存的物品（需 `yizhan.admin`） |
 | `/yizhan debugitem` | 诊断主手物品：打印 PDC / `custom_data` 键值对、CustomModelData 与拦截判定（需 `yizhan.admin`） |
 | `/yizhan reload` | 重载配置文件 |
 
@@ -186,7 +187,7 @@ messages:
   ship-start: "&a发货成功 &7#%id% &7目的地 &f%to% &7预计 &f%buffer%&7后到达"
   ship-arrived: "&a你的包裹 &7#%id% &a已到达 &f%station% &a，请前往领取"
   ship-waiting: "&e目标驿站 &f%station% &e已满，包裹 &7#%id% &e正在等待空位，请提醒接收方清理收件箱"
-  ship-returned: "&c目标驿站 &f%station% &c已满超过 &f%minutes% &c分钟，包裹 &7#%id% &c已退回你的邮箱"
+  ship-discarded: "&c目标驿站 &f%station% &c已满超过 &f%hours% &c小时，包裹 &7#%id% &c投递失败已暂存，请联系管理员领取"
 database:
   host: "127.0.0.1"
   port: 3306
@@ -216,14 +217,14 @@ ship-fee:
   currency-key: "currency"       # 快递费货币的识别键名（PDC / custom_data）
   currency-value: ""             # 留空只按键名判定；填值后必须键和值都匹配（Nexo 共用键名靠值区分时必填）
 shipment:
-  return-after-seconds: 600      # 目标驿站满后等待空位的秒数，超时自动退回发件人邮箱（最小 60）
+  discard-after-hours: 24        # 目标驿站满后一直重试，超过该小时数仍投不进则物品暂存到丢弃仓库（最小 1）
 ```
 
 **缓冲时间优先级**：路由设置 > 驿站设置 > `default-buffer-seconds`。
 
 > 升级提示：服务器上**已存在**的 `config.yml` 不会自动补齐新增配置段（代码有内置默认值，运行不受影响）。如需调整 `mailbox`、`daily-reward`、`ship-fee`，请手动把对应段落补进配置文件，然后 `/yizhan reload`。
 
-**消息占位符**：`ship-start` 支持 `%id%`、`%to%`、`%buffer%`；`ship-arrived` 支持 `%id%`、`%station%`；`ship-waiting` 支持 `%id%`、`%station%`；`ship-returned` 支持 `%id%`、`%station%`、`%minutes%`。所有模板都支持 `&` 颜色代码。
+**消息占位符**：`ship-start` 支持 `%id%`、`%to%`、`%buffer%`；`ship-arrived` 支持 `%id%`、`%station%`；`ship-waiting` 支持 `%id%`、`%station%`；`ship-discarded` 支持 `%id%`、`%station%`、`%hours%`。所有模板都支持 `&` 颜色代码。
 
 ## 物品过滤
 
@@ -270,6 +271,7 @@ item-filter:
 | `yz_daily_claims` | 每日奖励领取记录，按玩家记录最后领取日期 |
 | `yz_daily_rewards` | 登记的每日奖励模板物品（`/yizhan dailyreward add` 存入），按 `slot` 组织 |
 | `yz_mailbox_overflow` | 邮箱满时暂存的待领取邮件，按写入顺序（FIFO）补入邮箱 |
+| `yz_discarded_items` | 投递超时丢弃的物品暂存，管理员用 `/yz discarded` 领取 |
 | `yz_mailbox_blocks` | 各子服的邮箱方块绑定位置 |
 
 物品以 `ItemStack#serializeAsBytes()` 序列化后存 `LONGBLOB`。
@@ -286,13 +288,13 @@ UPDATE yz_shipments SET status='DELIVERED' WHERE id=? AND status='IN_TRANSIT'
 
 只有受影响行数为 1 的子服才真正执行入库，因此多个子服同时运行也只会投递一次。
 
-**收件箱写入**：发货前先预检 —— 「目标驿站收件箱已占槽位 + 在途包裹堆数 + 本次堆数」超过驿站容量时直接拒绝发货并提示清理。投递时再做一次空槽校验并做状态 CAS；若此刻仍放不下（并发发货或发货后被塞满），本次投递回滚、保留在途状态，给发件人推送一次「目标驿站已满」提示（只推一次，不刷屏），下一个轮询周期继续重试。超过 `shipment.return-after-seconds` 仍未投进，终止发货单（置 `RETURNED`）并把物品退回发件人邮箱（发件人邮箱满则继续走暂存待领取）。
+**收件箱写入**：发货前先预检 —— 「目标驿站收件箱已占槽位 + 在途包裹堆数 + 本次堆数」超过驿站容量时直接拒绝发货并提示清理。投递时再做一次空槽校验并做状态 CAS；若此刻仍放不下（并发发货或发货后被塞满），本次投递回滚、保留在途状态，给发件人推送一次「目标驿站已满」提示（只推一次，不刷屏），下一个轮询周期继续重试。超过 `shipment.discard-after-hours`（默认 24 小时）仍未投进，终止发货单（置 `DISCARDED`）并把物品暂存到 `yz_discarded_items` 表，管理员用 `/yz discarded` 打开 GUI 取出。
 
 **并发保护**：收件箱取出物品后，关闭界面时按 `version` 乐观锁回写；若期间被其他操作修改，会提示重新打开，不会覆盖别人的数据。
 
 **通知**：发货时直接给操作玩家发送「发货成功」消息。投递成功后把「包裹已到达」写入 `yz_notifications`；若发件人此刻恰好在本子服在线则立即发送，否则保留为未送达，玩家下次在任意子服上线时（延迟 1 秒）自动补发并标记已送达。通知领取使用 `SELECT ... FOR UPDATE` + 标记，多个子服同时上线不会重复发送。
 
-**邮箱投递**：`mail send` / `mail give` / 每日奖励、以及超时退回的包裹都走同一条路径 —— 把物品写入目标玩家 UUID 的 `yz_mailbox_items`，并用 `yz_mailbox_overflow` 兜底：邮箱满时放不下的邮件按写入顺序暂存，**不再丢弃**；玩家清理出空位后点邮箱界面的「重新领取」即可补入。暂存件数会写进邮件通知里。
+**邮箱投递**：`mail send` / `mail give` / 每日奖励都走同一条路径 —— 把物品写入目标玩家 UUID 的 `yz_mailbox_items`，并用 `yz_mailbox_overflow` 兜底：邮箱满时放不下的邮件按写入顺序暂存，**不再丢弃**；玩家清理出空位后点邮箱界面的「重新领取」即可补入。暂存件数会写进邮件通知里。
 
 **每日奖励**：玩家登录后 1 秒触发。先汇总奖励物品（`yz_daily_rewards` 里登记的模板物品 + `daily-reward.items` 配置的原版材质），为空则不标记领取；否则用 `yz_daily_claims` 记录最后领取日期并做当日去重（`INSERT IGNORE` + `UPDATE ... WHERE claim_date<>?`），因此多子服重复登录也只会发一次，**离线期间不补发**。
 
