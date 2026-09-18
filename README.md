@@ -104,11 +104,14 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | `/yizhan info <名称>` | 查看驿站详情 |
 | `/yizhan mailbox <bind\|unbind\|info>` | 绑定/解绑/查看自己的邮箱方块（需 `yizhan.mail`） |
 | `/yizhan mail send <玩家> [数量]` | 把主手物品发到目标玩家邮箱，省略数量则发整组 |
-| `/yizhan mail give <玩家> <物品ID> <数量>` | 发送指定物品到目标玩家邮箱 |
+| `/yizhan mail give <玩家> <物品ID\|代号> <数量>` | 发送指定物品到目标玩家邮箱；`<物品ID>` 可填原版材质名或 `/yz item add` 登记的代号 |
 | `/yizhan dailyreward add` | 把主手物品登记为每日奖励模板（支持 Nexo 等自定义物品，需 `yizhan.admin`） |
 | `/yizhan dailyreward list` | 查看已登记的每日奖励模板 |
 | `/yizhan dailyreward remove <槽位>` | 移除某个登记的每日奖励模板 |
 | `/yizhan dailyreward clear` | 清空全部登记的每日奖励模板 |
+| `/yizhan item add <代号>` | 手持物品登记为可按代号发放的模板（需 `yizhan.admin`） |
+| `/yizhan item list` | 列出已登记的物品模板代号 |
+| `/yizhan item remove <代号>` | 删除某个物品模板 |
 | `/yizhan discarded` | 打开丢弃物品仓库 GUI，取出投递超时被暂存的物品（需 `yizhan.admin`） |
 | `/yizhan debugitem` | 诊断主手物品：打印 PDC / `custom_data` 键值对、CustomModelData 与拦截判定（需 `yizhan.admin`） |
 | `/yizhan reload` | 重载配置文件 |
@@ -272,6 +275,7 @@ item-filter:
 | `yz_daily_rewards` | 登记的每日奖励模板物品（`/yizhan dailyreward add` 存入），按 `slot` 组织 |
 | `yz_mailbox_overflow` | 邮箱满时暂存的待领取邮件，按写入顺序（FIFO）补入邮箱 |
 | `yz_discarded_items` | 投递超时丢弃的物品暂存，管理员用 `/yz discarded` 领取 |
+| `yz_item_templates` | 可按代号发放的自定义物品模板，`/yz item add` 登记，`/yz mail give <玩家> <代号> <数量>` 发放 |
 | `yz_player_mailbox_blocks` | 各玩家在各子服的邮箱方块绑定位置 |
 
 物品以 `ItemStack#serializeAsBytes()` 序列化后存 `LONGBLOB`。
