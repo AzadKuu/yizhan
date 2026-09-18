@@ -739,6 +739,22 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                     + "请把上方命名空间加入 &fitem-filter.blocked-namespaces");
         }
         Msg.send(sender, config.getPrefix(), "&7SNBT: &f" + (meta == null ? "(null)" : meta.getAsString()));
+
+        plugin.getLogger().info("===== debugitem (" + player.getName() + ") =====");
+        plugin.getLogger().info("类型: " + item.getType().name());
+        plugin.getLogger().info("显示名: " + name);
+        plugin.getLogger().info("自定义模型数据: " + (meta != null && meta.hasCustomModelData() ? meta.getCustomModelData() : "(无)"));
+        if (meta != null) {
+            for (NamespacedKey key : meta.getPersistentDataContainer().getKeys()) {
+                String value = meta.getPersistentDataContainer().get(key, PersistentDataType.STRING);
+                plugin.getLogger().info("PDC: " + key + " = " + (value == null ? "(非字符串类型)" : "\"" + value + "\""));
+            }
+        }
+        for (Map.Entry<String, String> entry : customData.entrySet()) {
+            plugin.getLogger().info("custom_data: " + entry.getKey() + " = \"" + entry.getValue() + "\"");
+        }
+        plugin.getLogger().info("判定结果: " + (blocked ? "会被拦截" : "允许运输"));
+        plugin.getLogger().info("SNBT: " + (meta == null ? "(null)" : meta.getAsString()));
     }
 
     @SuppressWarnings("deprecation")
