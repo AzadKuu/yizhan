@@ -198,6 +198,13 @@ public class MysqlStorage implements Storage {
                         + "x INT NOT NULL, y INT NOT NULL, z INT NOT NULL,"
                         + "created_at BIGINT NOT NULL,"
                         + "PRIMARY KEY (player_uuid, server_id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "item_templates ("
+                        + "code VARCHAR(64) NOT NULL,"
+                        + "item_data LONGBLOB NOT NULL,"
+                        + "created_at BIGINT NOT NULL,"
+                        + "PRIMARY KEY (code)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         };
         try (Connection c = conn(); Statement st = c.createStatement()) {
@@ -1442,6 +1449,67 @@ public class MysqlStorage implements Storage {
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
             throw new StorageException("deletePlayerMailboxBlock failed", ex);
+        }
+    }
+
+    @Override
+    public void saveItemTemplate(String code, ItemStack item) {
+        byte[] data = ItemSerializer.serialize(item);
+        String sql = "INSERT INTO " + prefix + "item_templates (code, item_data, created_at) "
+                + "VALUES (?,?,?) ON DUPLICATE KEY UPDATE item_data=VALUES(item_data)";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, code);
+            ps.setBytes(2, data);
+            ps.setLong(3, System.currentTimeMillis());
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new StorageException("saveItemTemplate failed", ex);
+        }
+    }
+
+    @Override
+    public ItemStack getItemTemplate(String code) {
+        String sql = "SELECT item_data FROM " + prefix + "item_templates WHERE code=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, code);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return ItemSerializer.deserialize(rs.getBytes(1));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("getItemTemplate failed", ex);
+        }
+        return null;
+    }
+
+    @Override
+    public Map<String, ItemStack> listItemTemplates() {
+        Map<String, ItemStack> out = new LinkedHashMap<>();
+        String sql = "SELECT code, item_data FROM " + prefix + "item_templates ORDER BY code ASC";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ItemStack item = ItemSerializer.deserialize(rs.getBytes(2));
+                    if (item != null && !item.getType().isAir()) {
+                        out.put(rs.getString(1), item);
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("listItemTemplates failed", ex);
+        }
+        return out;
+    }
+
+    @Override
+    public boolean deleteItemTemplate(String code) {
+        String sql = "DELETE FROM " + prefix + "item_templates WHERE code=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, code);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            throw new StorageException("deleteItemTemplate failed", ex);
         }
     }
 }

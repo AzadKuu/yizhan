@@ -79,6 +79,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "mail" -> mail(sender, args);
             case "mailbox" -> mailbox(sender, args);
             case "dailyreward" -> dailyReward(sender, args);
+            case "item" -> item(sender, args);
             case "discarded" -> discarded(sender);
             case "debugitem" -> debugItem(sender);
             case "debugpdc" -> debugPdc(sender);
@@ -545,11 +546,6 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                     + " &c（可用玩家名或 UUID；从未进服的玩家请用 UUID）");
             return;
         }
-        Material material = Material.matchMaterial(args[3]);
-        if (material == null || material.isAir()) {
-            Msg.send(sender, config.getPrefix(), "&c无效的物品ID: &f" + args[3]);
-            return;
-        }
         int amount;
         try {
             amount = Integer.parseInt(args[4]);
@@ -559,6 +555,27 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         }
         if (amount < 1) {
             Msg.send(sender, config.getPrefix(), "&c数量必须大于 0");
+            return;
+        }
+        ItemStack template = storage.getItemTemplate(args[3]);
+        if (template != null) {
+            int max = Math.max(1, template.getMaxStackSize());
+            int remaining = amount;
+            List<ItemStack> templateItems = new ArrayList<>();
+            while (remaining > 0) {
+                int n = Math.min(max, remaining);
+                ItemStack copy = template.clone();
+                copy.setAmount(n);
+                templateItems.add(copy);
+                remaining -= n;
+            }
+            mailboxService.deliver(target, templateItems, "&a你收到了邮件: " + amount + " 个 " + args[3]);
+            Msg.send(sender, config.getPrefix(), "&a已发送 &f" + amount + " &a个 &f" + args[3] + " &a到 &f" + args[2] + " &a的邮箱");
+            return;
+        }
+        Material material = Material.matchMaterial(args[3]);
+        if (material == null || material.isAir()) {
+            Msg.send(sender, config.getPrefix(), "&c无效的物品ID或代号: &f" + args[3]);
             return;
         }
         List<ItemStack> items = buildStacks(material, amount);
@@ -787,6 +804,74 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&7请执行 &f/data get entity @s SelectedItem &7查看 Paper 实际写出的 NBT 格式");
     }
 
+    private void item(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz item add <代号> &7手持物品登记为模板");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz item list &7列出已登记模板");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz item remove <代号> &7删除模板");
+            return;
+        }
+        switch (args[1].toLowerCase(Locale.ROOT)) {
+            case "add" -> itemAdd(sender, args);
+            case "list" -> itemList(sender);
+            case "remove" -> itemRemove(sender, args);
+            default -> Msg.send(sender, config.getPrefix(), "&7用法: &f/yz item <add|list|remove>");
+        }
+    }
+
+    private void itemAdd(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            return;
+        }
+        if (!player.hasPermission("yizhan.admin")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        if (args.length < 3) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz item add <代号>");
+            return;
+        }
+        String code = args[2].toLowerCase(Locale.ROOT);
+        ItemStack item = player.getInventory().getItemInMainHand();
+        if (item == null || item.getType().isAir()) {
+            Msg.send(sender, config.getPrefix(), "&c主手没有物品");
+            return;
+        }
+        storage.saveItemTemplate(code, item.clone());
+        Msg.send(sender, config.getPrefix(), "&a已登记物品模板 &f" + code);
+    }
+
+    private void itemList(CommandSender sender) {
+        Map<String, ItemStack> templates = storage.listItemTemplates();
+        if (templates.isEmpty()) {
+            Msg.send(sender, config.getPrefix(), "&7暂无已登记的物品模板");
+            return;
+        }
+        Msg.send(sender, config.getPrefix(), "&6已登记物品模板 (&f" + templates.size() + "&6):");
+        for (Map.Entry<String, ItemStack> entry : templates.entrySet()) {
+            Msg.send(sender, config.getPrefix(), "  &8- &f" + entry.getKey()
+                    + " &7(" + entry.getValue().getType().name().toLowerCase(Locale.ROOT) + ")");
+        }
+    }
+
+    private void itemRemove(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("yizhan.admin")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        if (args.length < 3) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz item remove <代号>");
+            return;
+        }
+        String code = args[2].toLowerCase(Locale.ROOT);
+        if (storage.deleteItemTemplate(code)) {
+            Msg.send(sender, config.getPrefix(), "&a已删除物品模板 &f" + code);
+        } else {
+            Msg.send(sender, config.getPrefix(), "&7不存在代号 &f" + code);
+        }
+    }
+
     private void discarded(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
@@ -824,6 +909,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&f/yz mail give <玩家> <物品ID> <数量> &7发送指定物品");
         Msg.send(sender, config.getPrefix(), "&f/yz dailyreward add &7把主手物品登记为每日奖励（支持自定义物品）");
         Msg.send(sender, config.getPrefix(), "&f/yz dailyreward <list|remove|clear> &7管理登记的每日奖励");
+        Msg.send(sender, config.getPrefix(), "&f/yz item add <代号> &7手持物品登记为模板（自定义物品，需 yizhan.admin）");
+        Msg.send(sender, config.getPrefix(), "&f/yz item <list|remove> &7查看/删除物品模板");
         Msg.send(sender, config.getPrefix(), "&f/yz discarded &7打开丢弃物品仓库（管理员领取）");
         Msg.send(sender, config.getPrefix(), "&f/yz debugitem &7诊断主手物品（PDC 键、SNBT 与拦截判定）");
         Msg.send(sender, config.getPrefix(), "&f/yz debugpdc &7用 Bukkit API 给主手物品写测试 PDC 键");

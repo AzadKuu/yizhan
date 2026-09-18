@@ -100,4 +100,12 @@ public interface Storage extends AutoCloseable {
     void savePlayerMailboxBlock(UUID player, String serverId, String world, int x, int y, int z);
 
     boolean deletePlayerMailboxBlock(UUID player, String serverId);
+
+    void saveItemTemplate(String code, ItemStack item);
+
+    ItemStack getItemTemplate(String code);
+
+    Map<String, ItemStack> listItemTemplates();
+
+    boolean deleteItemTemplate(String code);
 }
