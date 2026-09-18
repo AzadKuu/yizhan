@@ -35,39 +35,39 @@ public class DeliveryTask implements Runnable {
 
     @Override
     public void run() {
-        returnStuckShipments();
+        discardStuckShipments();
         deliverDueShipments();
     }
 
-    private void returnStuckShipments() {
+    private void discardStuckShipments() {
         List<Shipment> stuck;
         try {
-            long deadline = System.currentTimeMillis() - config.getShipmentReturnAfterSeconds() * 1000L;
+            long deadline = System.currentTimeMillis() - config.getShipmentDiscardAfterHours() * 3600_000L;
             stuck = storage.listShipmentsStuckFull(batchSize, deadline);
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("poll stuck shipments failed: " + ex.getMessage());
             return;
         }
         for (Shipment shipment : stuck) {
-            boolean returned;
+            boolean discarded;
             try {
-                returned = storage.returnShipment(shipment.getId(), config.getMailboxSize());
+                discarded = storage.discardShipment(shipment.getId());
             } catch (RuntimeException ex) {
-                plugin.getLogger().warning("return shipment #" + shipment.getId() + " failed: " + ex.getMessage());
+                plugin.getLogger().warning("discard shipment #" + shipment.getId() + " failed: " + ex.getMessage());
                 continue;
             }
-            if (!returned) {
+            if (!discarded) {
                 continue;
             }
             UUID owner = shipment.getOwner();
             plugin.getLogger().warning("shipment #" + shipment.getId() + " 目标驿站 " + shipment.getToStation()
-                    + " 已满超时，包裹已退回发件人邮箱 (owner=" + owner + ")");
+                    + " 已满超过 " + config.getShipmentDiscardAfterHours() + " 小时，包裹已丢弃暂存 (owner=" + owner + ")");
             if (owner != null) {
                 try {
                     notificationService.notify(owner,
-                            notificationService.shipReturned(shipment.getId(), shipment.getToStation()));
+                            notificationService.shipDiscarded(shipment.getId(), shipment.getToStation()));
                 } catch (RuntimeException ex) {
-                    plugin.getLogger().warning("push return notification failed: " + ex.getMessage());
+                    plugin.getLogger().warning("push discard notification failed: " + ex.getMessage());
                 }
             }
             flushOwner(owner);

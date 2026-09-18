@@ -79,6 +79,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "mail" -> mail(sender, args);
             case "mailbox" -> mailbox(sender, args);
             case "dailyreward" -> dailyReward(sender, args);
+            case "discarded" -> discarded(sender);
             case "debugitem" -> debugItem(sender);
             case "debugpdc" -> debugPdc(sender);
             case "reload" -> reload(sender);
@@ -769,6 +770,18 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&7请执行 &f/data get entity @s SelectedItem &7查看 Paper 实际写出的 NBT 格式");
     }
 
+    private void discarded(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            return;
+        }
+        if (!player.hasPermission("yizhan.admin")) {
+            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            return;
+        }
+        guiManager.openDiscarded(player);
+    }
+
     private void reload(CommandSender sender) {
         if (!sender.hasPermission("yizhan.admin")) {
             Msg.send(sender, config.getPrefix(), "&c没有权限");
@@ -794,6 +807,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&f/yz mail give <玩家> <物品ID> <数量> &7发送指定物品");
         Msg.send(sender, config.getPrefix(), "&f/yz dailyreward add &7把主手物品登记为每日奖励（支持自定义物品）");
         Msg.send(sender, config.getPrefix(), "&f/yz dailyreward <list|remove|clear> &7管理登记的每日奖励");
+        Msg.send(sender, config.getPrefix(), "&f/yz discarded &7打开丢弃物品仓库（管理员领取）");
         Msg.send(sender, config.getPrefix(), "&f/yz debugitem &7诊断主手物品（PDC 键、SNBT 与拦截判定）");
         Msg.send(sender, config.getPrefix(), "&f/yz debugpdc &7用 Bukkit API 给主手物品写测试 PDC 键");
         Msg.send(sender, config.getPrefix(), "&f/yz reload &7重载配置");

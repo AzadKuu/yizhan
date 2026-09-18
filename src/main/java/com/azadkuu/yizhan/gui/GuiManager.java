@@ -45,6 +45,7 @@ public class GuiManager {
     private final ItemFilter filter;
     private final Map<UUID, StationHolder> open = new HashMap<>();
     private final Map<UUID, MailboxHolder> openMailboxes = new HashMap<>();
+    private final Map<UUID, DiscardedHolder> openDiscarded = new HashMap<>();
     private MailboxBlock mailboxBlock;
 
     public GuiManager(PluginConfig config, Storage storage, TransportService transport, ItemFilter filter) {
@@ -272,6 +273,47 @@ public class GuiManager {
 
     public static int mailSlotInfo(int items) {
         return items + 8;
+    }
+
+    public static final int DISCARDED_SLOT_CLOSE = 49;
+    public static final int DISCARDED_SLOT_INFO = 53;
+
+    public DiscardedHolder getOpenDiscarded(UUID uuid) {
+        return openDiscarded.get(uuid);
+    }
+
+    public void unregisterDiscarded(UUID uuid) {
+        openDiscarded.remove(uuid);
+    }
+
+    public void openDiscarded(Player player) {
+        UUID uuid = player.getUniqueId();
+        DiscardedHolder holder = new DiscardedHolder();
+        Inventory inventory = Bukkit.createInventory(holder, 54, Msg.component("&8丢弃物品仓库 &7· &6管理员"));
+        holder.setInventory(inventory);
+        Map<Long, ItemStack> items = storage.listDiscardedItems();
+        int slot = 0;
+        for (Map.Entry<Long, ItemStack> entry : items.entrySet()) {
+            if (slot >= 45) {
+                break;
+            }
+            inventory.setItem(slot, entry.getValue());
+            holder.getSlotToId().put(slot, entry.getKey());
+            slot++;
+        }
+        renderDiscarded(holder);
+        openDiscarded.put(uuid, holder);
+        player.openInventory(inventory);
+    }
+
+    public void renderDiscarded(DiscardedHolder holder) {
+        Inventory inventory = holder.getInventory();
+        int count = holder.getSlotToId().size();
+        inventory.setItem(DISCARDED_SLOT_CLOSE, button(Material.OAK_DOOR, "&e关闭"));
+        inventory.setItem(DISCARDED_SLOT_INFO, button(Material.PAPER, "&f丢弃物品仓库",
+                "&7当前显示: &f" + count + " &7件",
+                "&7点击物品取出到背包",
+                "&7超过 45 件仅显示前 45 件"));
     }
 
     public void loadMailboxBlock() {

@@ -53,11 +53,11 @@ public class NotificationService {
                 .replace("%station%", station == null ? "" : station);
     }
 
-    public String shipReturned(long id, String station) {
-        int minutes = Math.max(1, config.getShipmentReturnAfterSeconds() / 60);
-        return config.getShipReturnedMessage()
+    public String shipDiscarded(long id, String station) {
+        int hours = Math.max(1, config.getShipmentDiscardAfterHours());
+        return config.getShipDiscardedMessage()
                 .replace("%id%", Long.toString(id))
                 .replace("%station%", station == null ? "" : station)
-                .replace("%minutes%", Integer.toString(minutes));
+                .replace("%hours%", Integer.toString(hours));
     }
 }

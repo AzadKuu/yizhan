@@ -57,7 +57,7 @@ public interface Storage extends AutoCloseable {
 
     List<Shipment> listShipmentsStuckFull(int limit, long fullBeforeMillis);
 
-    boolean returnShipment(long shipmentId, int mailboxSize);
+    boolean discardShipment(long shipmentId);
 
     boolean cancelShipment(long shipmentId);
 
@@ -68,6 +68,12 @@ public interface Storage extends AutoCloseable {
     Map<Integer, ItemStack> loadStationItems(String stationId);
 
     int saveStationItems(String stationId, Map<Integer, ItemStack> items, int expectedVersion);
+
+    Map<Long, ItemStack> listDiscardedItems();
+
+    boolean claimDiscardedItem(long id);
+
+    int countDiscardedItems();
 
     void pushNotification(UUID player, String message);
 

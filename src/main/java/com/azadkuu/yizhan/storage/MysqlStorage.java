@@ -177,6 +177,18 @@ public class MysqlStorage implements Storage {
                         + "created_at BIGINT NOT NULL,"
                         + "PRIMARY KEY (id),"
                         + "KEY idx_yz_overflow (player_uuid, id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "discarded_items ("
+                        + "id BIGINT NOT NULL AUTO_INCREMENT,"
+                        + "shipment_id BIGINT NOT NULL,"
+                        + "owner_uuid VARCHAR(36) NULL,"
+                        + "from_station VARCHAR(64) NOT NULL,"
+                        + "to_station VARCHAR(64) NOT NULL,"
+                        + "item_data LONGBLOB NOT NULL,"
+                        + "discarded_at BIGINT NOT NULL,"
+                        + "PRIMARY KEY (id),"
+                        + "KEY idx_yz_discard (owner_uuid, id)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         };
         try (Connection c = conn(); Statement st = c.createStatement()) {
@@ -727,12 +739,15 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
-    public boolean returnShipment(long shipmentId, int mailboxSize) {
+    public boolean discardShipment(long shipmentId) {
         try (Connection c = conn()) {
             c.setAutoCommit(false);
             try {
+                long sid;
                 UUID owner;
-                try (PreparedStatement ps = c.prepareStatement("SELECT owner_uuid FROM " + prefix
+                String fromStation;
+                String toStation;
+                try (PreparedStatement ps = c.prepareStatement("SELECT id, owner_uuid, from_station, to_station FROM " + prefix
                         + "shipments WHERE id=? AND status='IN_TRANSIT' FOR UPDATE")) {
                     ps.setLong(1, shipmentId);
                     try (ResultSet rs = ps.executeQuery()) {
@@ -740,23 +755,32 @@ public class MysqlStorage implements Storage {
                             c.rollback();
                             return false;
                         }
-                        String raw = rs.getString(1);
+                        sid = rs.getLong(1);
+                        String raw = rs.getString(2);
                         owner = raw == null ? null : UUID.fromString(raw);
+                        fromStation = rs.getString(3);
+                        toStation = rs.getString(4);
                     }
                 }
                 Map<Integer, byte[]> items = loadShipmentItemBytes(c, shipmentId);
-                if (owner != null && !items.isEmpty()) {
-                    List<ItemStack> stacks = new ArrayList<>();
-                    for (byte[] data : items.values()) {
-                        ItemStack item = ItemSerializer.deserialize(data);
-                        if (item != null && !item.getType().isAir()) {
-                            stacks.add(item);
+                if (!items.isEmpty()) {
+                    long now = System.currentTimeMillis();
+                    try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix
+                            + "discarded_items (shipment_id, owner_uuid, from_station, to_station, item_data, discarded_at) VALUES (?,?,?,?,?,?)")) {
+                        for (byte[] data : items.values()) {
+                            ps.setLong(1, sid);
+                            ps.setString(2, owner == null ? null : owner.toString());
+                            ps.setString(3, fromStation);
+                            ps.setString(4, toStation);
+                            ps.setBytes(5, data);
+                            ps.setLong(6, now);
+                            ps.addBatch();
                         }
+                        ps.executeBatch();
                     }
-                    depositToMailboxInternal(c, owner, stacks, mailboxSize);
                 }
                 try (PreparedStatement ps = c.prepareStatement("UPDATE " + prefix
-                        + "shipments SET status='RETURNED', full_since=NULL, version=version+1 WHERE id=? AND status='IN_TRANSIT'")) {
+                        + "shipments SET status='DISCARDED', full_since=NULL, version=version+1 WHERE id=? AND status='IN_TRANSIT'")) {
                     ps.setLong(1, shipmentId);
                     ps.executeUpdate();
                 }
@@ -773,8 +797,53 @@ public class MysqlStorage implements Storage {
                 }
             }
         } catch (SQLException ex) {
-            throw new StorageException("returnShipment failed", ex);
+            throw new StorageException("discardShipment failed", ex);
         }
+    }
+
+    @Override
+    public Map<Long, ItemStack> listDiscardedItems() {
+        Map<Long, ItemStack> out = new LinkedHashMap<>();
+        String sql = "SELECT id, item_data FROM " + prefix + "discarded_items ORDER BY id ASC";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    long id = rs.getLong(1);
+                    byte[] data = rs.getBytes(2);
+                    ItemStack item = ItemSerializer.deserialize(data);
+                    if (item != null && !item.getType().isAir()) {
+                        out.put(id, item);
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("listDiscardedItems failed", ex);
+        }
+        return out;
+    }
+
+    @Override
+    public boolean claimDiscardedItem(long id) {
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement("DELETE FROM " + prefix + "discarded_items WHERE id=?")) {
+            ps.setLong(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            throw new StorageException("claimDiscardedItem failed", ex);
+        }
+    }
+
+    @Override
+    public int countDiscardedItems() {
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM " + prefix + "discarded_items")) {
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("countDiscardedItems failed", ex);
+        }
+        return 0;
     }
 
     private void deleteShipmentItems(Connection c, long shipmentId) throws SQLException {

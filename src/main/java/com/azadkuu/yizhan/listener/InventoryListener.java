@@ -3,6 +3,7 @@ package com.azadkuu.yizhan.listener;
 import com.azadkuu.yizhan.YizhanPlugin;
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.gui.GuiManager;
+import com.azadkuu.yizhan.gui.DiscardedHolder;
 import com.azadkuu.yizhan.gui.MailboxHolder;
 import com.azadkuu.yizhan.gui.StationHolder;
 import com.azadkuu.yizhan.model.Route;
@@ -58,6 +59,10 @@ public class InventoryListener implements Listener {
         Player player = (Player) event.getWhoClicked();
         if (top.getHolder() instanceof MailboxHolder mailbox) {
             handleMailboxClick(event, player, top, mailbox);
+            return;
+        }
+        if (top.getHolder() instanceof DiscardedHolder discarded) {
+            handleDiscardedClick(event, player, top, discarded);
             return;
         }
         if (!(top.getHolder() instanceof StationHolder holder)) {
@@ -177,6 +182,47 @@ public class InventoryListener implements Listener {
         }
     }
 
+    private void handleDiscardedClick(InventoryClickEvent event, Player player, Inventory top, DiscardedHolder holder) {
+        int raw = event.getRawSlot();
+        if (raw < 0) {
+            return;
+        }
+        if (raw >= 54) {
+            if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+        event.setCancelled(true);
+        if (raw == GuiManager.DISCARDED_SLOT_CLOSE) {
+            player.closeInventory();
+            return;
+        }
+        if (raw >= 45) {
+            return;
+        }
+        Long id = holder.getSlotToId().get(raw);
+        if (id == null) {
+            return;
+        }
+        ItemStack item = top.getItem(raw);
+        if (item == null || item.getType().isAir()) {
+            return;
+        }
+        try {
+            storage.claimDiscardedItem(id);
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("claim discarded item " + id + " failed: " + ex.getMessage());
+            Msg.send(player, config.getPrefix(), "&c领取失败，请稍后重试");
+            return;
+        }
+        giveOrDrop(player, item.clone());
+        top.setItem(raw, null);
+        holder.getSlotToId().remove(raw);
+        guiManager.renderDiscarded(holder);
+        player.updateInventory();
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onDrag(InventoryDragEvent event) {
         Inventory top = event.getView().getTopInventory();
@@ -184,6 +230,15 @@ public class InventoryListener implements Listener {
             int items = config.getMailboxSize();
             for (int slot : event.getRawSlots()) {
                 if (slot >= items && slot < top.getSize()) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+            return;
+        }
+        if (top.getHolder() instanceof DiscardedHolder) {
+            for (int slot : event.getRawSlots()) {
+                if (slot < 54) {
                     event.setCancelled(true);
                     return;
                 }
@@ -235,6 +290,10 @@ public class InventoryListener implements Listener {
             }
             guiManager.unregisterMailbox(player.getUniqueId());
             saveMailbox(mailbox);
+            return;
+        }
+        if (top.getHolder() instanceof DiscardedHolder) {
+            guiManager.unregisterDiscarded(player.getUniqueId());
             return;
         }
         if (!(top.getHolder() instanceof StationHolder holder)) {

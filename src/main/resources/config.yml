@@ -11,7 +11,7 @@ messages:
   ship-start: "&a发货成功 &7#%id% &7目的地 &f%to% &7预计 &f%buffer%&7后到达"
   ship-arrived: "&a你的包裹 &7#%id% &a已到达 &f%station% &a，请前往领取"
   ship-waiting: "&e目标驿站 &f%station% &e已满，包裹 &7#%id% &e正在等待空位，请提醒接收方清理收件箱"
-  ship-returned: "&c目标驿站 &f%station% &c已满超过 &f%minutes% &c分钟，包裹 &7#%id% &c已退回你的邮箱"
+  ship-discarded: "&c目标驿站 &f%station% &c已满超过 &f%hours% &c小时，包裹 &7#%id% &c投递失败已暂存，请联系管理员领取"
 database:
   host: "127.0.0.1"
   port: 3306
@@ -57,5 +57,5 @@ ship-fee:
   # 用 /yz debugitem 查看手持货币物品的实际键值。
   currency-value: ""
 shipment:
-  # 目标驿站满时先等待空位；超过该秒数仍投不进，包裹自动退回发件人邮箱（最小 60）
-  return-after-seconds: 600
+  # 目标驿站满时一直重试投递；超过该小时数仍投不进，包裹物品暂存到丢弃仓库（管理员用 /yz discarded 领取）
+  discard-after-hours: 24

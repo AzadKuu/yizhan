@@ -16,14 +16,14 @@ public class PluginConfig {
     private int pollIntervalSeconds;
     private int defaultBufferSeconds;
     private boolean allowCancelShipment;
-    private int shipmentReturnAfterSeconds;
+    private int shipmentDiscardAfterHours;
     private int defaultStationSize;
     private int maxStationSize;
     private String prefix;
     private String shipStartMessage;
     private String shipArrivedMessage;
     private String shipWaitingMessage;
-    private String shipReturnedMessage;
+    private String shipDiscardedMessage;
 
     private String dbHost;
     private int dbPort;
@@ -54,7 +54,7 @@ public class PluginConfig {
         this.pollIntervalSeconds = Math.max(1, cfg.getInt("poll-interval-seconds", 3));
         this.defaultBufferSeconds = Math.max(1, cfg.getInt("default-buffer-seconds", 300));
         this.allowCancelShipment = cfg.getBoolean("allow-cancel-shipment", false);
-        this.shipmentReturnAfterSeconds = Math.max(60, cfg.getInt("shipment.return-after-seconds", 600));
+        this.shipmentDiscardAfterHours = Math.max(1, cfg.getInt("shipment.discard-after-hours", 24));
         this.defaultStationSize = clampSize(cfg.getInt("default-station-size", 27));
         this.maxStationSize = clampSize(cfg.getInt("max-station-size", 45));
         this.prefix = cfg.getString("language.prefix", "&8[&6驿站&8] &r");
@@ -64,8 +64,8 @@ public class PluginConfig {
                 "&a你的包裹 &7#%id% &a已到达 &f%station% &a，请前往领取");
         this.shipWaitingMessage = cfg.getString("messages.ship-waiting",
                 "&e目标驿站 &f%station% &e已满，包裹 &7#%id% &e正在等待空位，请提醒对方清理收件箱");
-        this.shipReturnedMessage = cfg.getString("messages.ship-returned",
-                "&c目标驿站 &f%station% &c已满超过 &f%minutes% &c分钟，包裹 &7#%id% &c已退回你的邮箱");
+        this.shipDiscardedMessage = cfg.getString("messages.ship-discarded",
+                "&c目标驿站 &f%station% &c已满超过 &f%hours% &c小时，包裹 &7#%id% &c投递失败已暂存，请联系管理员领取");
 
         this.dbHost = cfg.getString("database.host", "127.0.0.1");
         this.dbPort = cfg.getInt("database.port", 3306);
@@ -209,12 +209,12 @@ public class PluginConfig {
         return shipWaitingMessage;
     }
 
-    public String getShipReturnedMessage() {
-        return shipReturnedMessage;
+    public String getShipDiscardedMessage() {
+        return shipDiscardedMessage;
     }
 
-    public int getShipmentReturnAfterSeconds() {
-        return shipmentReturnAfterSeconds;
+    public int getShipmentDiscardAfterHours() {
+        return shipmentDiscardAfterHours;
     }
 
     public String getDbHost() {
