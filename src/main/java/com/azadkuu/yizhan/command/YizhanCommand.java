@@ -270,45 +270,46 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
     }
 
     private void mailbox(CommandSender sender, String[] args) {
-        if (!sender.hasPermission("yizhan.admin")) {
+        if (!(sender instanceof Player player)) {
+            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            return;
+        }
+        if (!player.hasPermission("yizhan.mail")) {
             Msg.send(sender, config.getPrefix(), "&c没有权限");
             return;
         }
         if (args.length < 2) {
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox bind &7绑定准星方块为全服邮箱");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox bind &7绑定准星方块为你的邮箱");
             Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox unbind &7解除绑定");
             Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox info &7查看当前绑定");
             return;
         }
         switch (args[1].toLowerCase(Locale.ROOT)) {
             case "bind" -> {
-                if (!(sender instanceof Player player)) {
-                    Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
-                    return;
-                }
                 Block block = player.getTargetBlockExact(6);
                 if (block == null) {
                     Msg.send(sender, config.getPrefix(), "&c请把准星对准一个方块（6 格以内）");
                     return;
                 }
-                guiManager.bindMailboxBlock(block);
+                storage.savePlayerMailboxBlock(player.getUniqueId(), config.getServerId(),
+                        block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
                 Msg.send(sender, config.getPrefix(), "&a已把 &f" + block.getWorld().getName() + " "
                         + block.getX() + "," + block.getY() + "," + block.getZ()
-                        + " &a设为全服邮箱方块，玩家右键即可打开自己的邮箱");
+                        + " &a设为你的邮箱方块，右键即可打开邮箱");
             }
             case "unbind" -> {
-                if (guiManager.unbindMailboxBlock()) {
-                    Msg.send(sender, config.getPrefix(), "&a已解除本服邮箱方块绑定");
+                if (storage.deletePlayerMailboxBlock(player.getUniqueId(), config.getServerId())) {
+                    Msg.send(sender, config.getPrefix(), "&a已解除你的邮箱方块绑定");
                 } else {
-                    Msg.send(sender, config.getPrefix(), "&7本服尚未绑定邮箱方块");
+                    Msg.send(sender, config.getPrefix(), "&7你尚未绑定邮箱方块");
                 }
             }
             case "info" -> {
-                MailboxBlock bound = guiManager.getMailboxBlock();
+                MailboxBlock bound = storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId());
                 if (bound == null) {
-                    Msg.send(sender, config.getPrefix(), "&7本服尚未绑定邮箱方块，请用 &f/yz mailbox bind");
+                    Msg.send(sender, config.getPrefix(), "&7你尚未绑定邮箱方块，请用 &f/yz mailbox bind");
                 } else {
-                    Msg.send(sender, config.getPrefix(), "&a本服邮箱方块: &f" + bound.world() + " "
+                    Msg.send(sender, config.getPrefix(), "&a你的邮箱方块: &f" + bound.world() + " "
                             + bound.x() + "," + bound.y() + "," + bound.z());
                 }
             }

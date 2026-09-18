@@ -95,9 +95,9 @@ public interface Storage extends AutoCloseable {
 
     void saveDailyRewardItems(Map<Integer, ItemStack> items);
 
-    MailboxBlock getMailboxBlock(String serverId);
+    MailboxBlock getPlayerMailboxBlock(UUID player, String serverId);
 
-    void saveMailboxBlock(MailboxBlock block);
+    void savePlayerMailboxBlock(UUID player, String serverId, String world, int x, int y, int z);
 
-    void deleteMailboxBlock(String serverId);
+    boolean deletePlayerMailboxBlock(UUID player, String serverId);
 }

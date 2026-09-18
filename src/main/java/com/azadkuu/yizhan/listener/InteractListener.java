@@ -2,6 +2,7 @@ package com.azadkuu.yizhan.listener;
 
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.gui.GuiManager;
+import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Station;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.util.Msg;
@@ -35,7 +36,12 @@ public class InteractListener implements Listener {
             return;
         }
         Player player = event.getPlayer();
-        if (guiManager.isMailboxBlock(block)) {
+        MailboxBlock mailboxBlock = storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId());
+        if (mailboxBlock != null
+                && mailboxBlock.world().equals(block.getWorld().getName())
+                && mailboxBlock.x() == block.getX()
+                && mailboxBlock.y() == block.getY()
+                && mailboxBlock.z() == block.getZ()) {
             event.setCancelled(true);
             if (!player.hasPermission("yizhan.mail")) {
                 Msg.send(player, config.getPrefix(), "&c你没有权限打开邮箱");

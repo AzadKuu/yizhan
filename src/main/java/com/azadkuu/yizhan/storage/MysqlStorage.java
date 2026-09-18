@@ -189,6 +189,15 @@ public class MysqlStorage implements Storage {
                         + "discarded_at BIGINT NOT NULL,"
                         + "PRIMARY KEY (id),"
                         + "KEY idx_yz_discard (owner_uuid, id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "player_mailbox_blocks ("
+                        + "player_uuid VARCHAR(36) NOT NULL,"
+                        + "server_id VARCHAR(64) NOT NULL,"
+                        + "world VARCHAR(64) NOT NULL,"
+                        + "x INT NOT NULL, y INT NOT NULL, z INT NOT NULL,"
+                        + "created_at BIGINT NOT NULL,"
+                        + "PRIMARY KEY (player_uuid, server_id)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         };
         try (Connection c = conn(); Statement st = c.createStatement()) {
@@ -1390,47 +1399,49 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
-    public MailboxBlock getMailboxBlock(String serverId) {
-        String sql = "SELECT world, x, y, z FROM " + prefix + "mailbox_blocks WHERE server_id=?";
+    public MailboxBlock getPlayerMailboxBlock(UUID player, String serverId) {
+        String sql = "SELECT world, x, y, z FROM " + prefix + "player_mailbox_blocks WHERE player_uuid=? AND server_id=?";
         try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, serverId);
+            ps.setString(1, player.toString());
+            ps.setString(2, serverId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return new MailboxBlock(serverId, rs.getString(1), rs.getInt(2), rs.getInt(3), rs.getInt(4));
                 }
             }
         } catch (SQLException ex) {
-            throw new StorageException("getMailboxBlock failed", ex);
+            throw new StorageException("getPlayerMailboxBlock failed", ex);
         }
         return null;
     }
 
     @Override
-    public void saveMailboxBlock(MailboxBlock block) {
-        String sql = "INSERT INTO " + prefix + "mailbox_blocks (server_id, world, x, y, z, created_at) "
-                + "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE world=VALUES(world), x=VALUES(x), "
-                + "y=VALUES(y), z=VALUES(z)";
+    public void savePlayerMailboxBlock(UUID player, String serverId, String world, int x, int y, int z) {
+        String sql = "INSERT INTO " + prefix + "player_mailbox_blocks (player_uuid, server_id, world, x, y, z, created_at) "
+                + "VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE world=VALUES(world), x=VALUES(x), y=VALUES(y), z=VALUES(z)";
         try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, block.serverId());
-            ps.setString(2, block.world());
-            ps.setInt(3, block.x());
-            ps.setInt(4, block.y());
-            ps.setInt(5, block.z());
-            ps.setLong(6, System.currentTimeMillis());
+            ps.setString(1, player.toString());
+            ps.setString(2, serverId);
+            ps.setString(3, world);
+            ps.setInt(4, x);
+            ps.setInt(5, y);
+            ps.setInt(6, z);
+            ps.setLong(7, System.currentTimeMillis());
             ps.executeUpdate();
         } catch (SQLException ex) {
-            throw new StorageException("saveMailboxBlock failed", ex);
+            throw new StorageException("savePlayerMailboxBlock failed", ex);
         }
     }
 
     @Override
-    public void deleteMailboxBlock(String serverId) {
-        String sql = "DELETE FROM " + prefix + "mailbox_blocks WHERE server_id=?";
+    public boolean deletePlayerMailboxBlock(UUID player, String serverId) {
+        String sql = "DELETE FROM " + prefix + "player_mailbox_blocks WHERE player_uuid=? AND server_id=?";
         try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, serverId);
-            ps.executeUpdate();
+            ps.setString(1, player.toString());
+            ps.setString(2, serverId);
+            return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
-            throw new StorageException("deleteMailboxBlock failed", ex);
+            throw new StorageException("deletePlayerMailboxBlock failed", ex);
         }
     }
 }

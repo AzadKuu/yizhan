@@ -48,11 +48,6 @@ public final class YizhanPlugin extends JavaPlugin {
         this.notificationService = new NotificationService(config, storage);
         this.guiManager = new GuiManager(config, storage, transport, itemFilter);
         this.mailboxService = new MailboxService(this, config, storage, notificationService);
-        try {
-            guiManager.loadMailboxBlock();
-        } catch (RuntimeException ex) {
-            getLogger().warning("读取邮箱方块绑定失败: " + ex.getMessage());
-        }
 
         YizhanCommand command = new YizhanCommand(this, config, storage, transport, guiManager, itemFilter,
                 mailboxService);
@@ -97,11 +92,6 @@ public final class YizhanPlugin extends JavaPlugin {
     public void reload() {
         reloadConfig();
         config.load(getConfig());
-        try {
-            guiManager.loadMailboxBlock();
-        } catch (RuntimeException ex) {
-            getLogger().warning("读取邮箱方块绑定失败: " + ex.getMessage());
-        }
         getLogger().info("配置已重载, debug=" + config.isDebug());
         logItemFilter();
     }

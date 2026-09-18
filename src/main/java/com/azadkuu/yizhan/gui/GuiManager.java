@@ -46,7 +46,6 @@ public class GuiManager {
     private final Map<UUID, StationHolder> open = new HashMap<>();
     private final Map<UUID, MailboxHolder> openMailboxes = new HashMap<>();
     private final Map<UUID, DiscardedHolder> openDiscarded = new HashMap<>();
-    private MailboxBlock mailboxBlock;
 
     public GuiManager(PluginConfig config, Storage storage, TransportService transport, ItemFilter filter) {
         this.config = config;
@@ -314,39 +313,6 @@ public class GuiManager {
                 "&7当前显示: &f" + count + " &7件",
                 "&7点击物品取出到背包",
                 "&7超过 45 件仅显示前 45 件"));
-    }
-
-    public void loadMailboxBlock() {
-        this.mailboxBlock = storage.getMailboxBlock(config.getServerId());
-    }
-
-    public MailboxBlock getMailboxBlock() {
-        return mailboxBlock;
-    }
-
-    public void bindMailboxBlock(Block block) {
-        MailboxBlock bound = new MailboxBlock(config.getServerId(), block.getWorld().getName(),
-                block.getX(), block.getY(), block.getZ());
-        storage.saveMailboxBlock(bound);
-        this.mailboxBlock = bound;
-    }
-
-    public boolean unbindMailboxBlock() {
-        if (mailboxBlock == null) {
-            return false;
-        }
-        storage.deleteMailboxBlock(config.getServerId());
-        this.mailboxBlock = null;
-        return true;
-    }
-
-    public boolean isMailboxBlock(Block block) {
-        MailboxBlock bound = mailboxBlock;
-        return bound != null
-                && bound.world().equals(block.getWorld().getName())
-                && bound.x() == block.getX()
-                && bound.y() == block.getY()
-                && bound.z() == block.getZ();
     }
 
     private ItemStack button(Material material, String name, String... lore) {
