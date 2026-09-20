@@ -7,7 +7,7 @@ Paper 1.21.x 跨服物资运输插件。把物品从一个服务器的容器，�
 ## 特性
 
 - **虚拟容器**：驿站是一个绑定在方块上的虚拟容器，内容存在数据库里，不占用原版箱子
-- **命令绑定位置**：`/yizhan bind` 把准星指向的方块注册为驿站
+- **命令绑定位置**：`/yizhan bind` 把准星指向的方块注册为驿站，可设昵称（支持中文和颜色码），各类提示消息和 GUI 显示都用昵称
 - **单向路由 + 缓冲时间**：`发送站 -> 接收站`，缓冲时间可按路由或按驿站配置
 - **MySQL 中继**：HikariCP 连接池，事务 + version 乐观锁 + 投递状态 CAS，多子服同时运行不会重复投递或复制物品
 - **非原版物品拦截**：按 `custom_data` / PersistentDataContainer 的命名空间做黑名单校验，默认拦截 Nexo、ItemsAdder 等自定义物品
@@ -93,8 +93,9 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 
 | 命令 | 说明 |
 |---|---|
-| `/yizhan bind <名称> <send\|receive\|both>` | 把准星指向的方块（6 格内）绑定为驿站 |
+| `/yizhan bind <名称> <send\|receive\|both> [昵称]` | 把准星指向的方块（6 格内）绑定为驿站；可选昵称支持中文和 `&` 颜色码，不填则昵称=名称 |
 | `/yizhan unbind <名称>` | 解绑驿站，并清空其收件箱 |
+| `/yizhan setname <驿站ID> <昵称>` | 修改驿站昵称（支持中文和 `&` 颜色码），各类提示消息和 GUI 显示都用昵称 |
 | `/yizhan route <起点> <终点> [缓冲秒] [快递费]` | 建立或更新单向路由，省略秒数则用默认缓冲 |
 | `/yizhan route remove <起点> <终点>` | 删除路由 |
 | `/yizhan fee <起点> <终点> <数量>` | 设置路由的快递费（需 `yizhan.route`） |
