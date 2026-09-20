@@ -465,7 +465,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
     private void mail(CommandSender sender, String[] args) {
         if (args.length < 2) {
             Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail send <玩家> [数量] &7把主手物品发到对方邮箱");
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量>");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量> [消息]");
             return;
         }
         switch (args[1].toLowerCase(Locale.ROOT)) {
@@ -473,7 +473,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "give" -> mailGive(sender, args);
             default -> {
                 Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail send <玩家> [数量]");
-                Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量>");
+                Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量> [消息]");
             }
         }
     }
@@ -548,7 +548,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 5) {
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量>");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail give <玩家> <物品ID> <数量> [消息]");
             return;
         }
         UUID target = resolveUuid(args[2]);
@@ -567,6 +567,17 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             Msg.send(sender, config.getPrefix(), config.getAmountPositiveMessage());
             return;
         }
+        String customMessage = null;
+        if (args.length > 5) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 5; i < args.length; i++) {
+                if (i > 5) {
+                    sb.append(' ');
+                }
+                sb.append(args[i]);
+            }
+            customMessage = sb.toString();
+        }
         ItemStack template = storage.getItemTemplate(args[3]);
         if (template != null) {
             int max = Math.max(1, template.getMaxStackSize());
@@ -583,7 +594,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             if (template.hasItemMeta() && template.getItemMeta().hasDisplayName()) {
                 displayName = template.getItemMeta().getDisplayName().replace('\u00A7', '&');
             }
-            mailboxService.deliver(target, templateItems, config.getMailReceivedMessage()
+            String notifyMsg = customMessage != null ? customMessage : config.getMailReceivedMessage();
+            mailboxService.deliver(target, templateItems, notifyMsg
                     .replace("%amount%", String.valueOf(amount))
                     .replace("%item%", displayName));
             Msg.send(sender, config.getPrefix(), config.getMailSentMessage()
@@ -599,7 +611,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         }
         List<ItemStack> items = buildStacks(material, amount);
         String matName = material.name().toLowerCase(Locale.ROOT);
-        mailboxService.deliver(target, items, config.getMailReceivedMessage()
+        String notifyMsg = customMessage != null ? customMessage : config.getMailReceivedMessage();
+        mailboxService.deliver(target, items, notifyMsg
                 .replace("%amount%", String.valueOf(amount))
                 .replace("%item%", matName));
         Msg.send(sender, config.getPrefix(), config.getMailSentMessage()
@@ -929,7 +942,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&f/yz info <名称> &7查看驿站详情");
         Msg.send(sender, config.getPrefix(), "&f/yz mailbox <bind|unbind|info> &7设置全服邮箱方块");
         Msg.send(sender, config.getPrefix(), "&f/yz mail send <玩家> [数量] &7把主手物品发到对方邮箱");
-        Msg.send(sender, config.getPrefix(), "&f/yz mail give <玩家> <物品ID> <数量> &7发送指定物品");
+        Msg.send(sender, config.getPrefix(), "&f/yz mail give <玩家> <物品ID> <数量> [消息] &7发送指定物品并自定义通知");
         Msg.send(sender, config.getPrefix(), "&f/yz dailyreward add &7把主手物品登记为每日奖励（支持自定义物品）");
         Msg.send(sender, config.getPrefix(), "&f/yz dailyreward <list|remove|clear> &7管理登记的每日奖励");
         Msg.send(sender, config.getPrefix(), "&f/yz item add <代号> &7手持物品登记为模板（自定义物品，需 yizhan.admin）");
