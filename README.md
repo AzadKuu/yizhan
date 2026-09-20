@@ -15,7 +15,7 @@ Paper 1.21.x 跨服物资运输插件。把物品从一个服务器的容器，�
 - **邮箱暂存不丢件**：收件人邮箱满时，放不下的邮件进入待领取队列，清理邮箱后点邮箱界面的「重新领取」即可补入，不会消失
 - **发货与到货通知**：发货、投递完成、目标满等待、超时丢弃都会给相关玩家发消息；玩家不在线时消息入库，下次在任意子服上线自动补发
 - **玩家邮箱**：每个玩家用 `/yizhan mailbox bind` 绑定自己的邮箱方块，右键即可打开独立的邮箱，物品按 UUID 存库，天然跨服
-- **跨服发奖**：`/yizhan mail send` / `/yizhan mail give` 可把物品直接投递到任意玩家（含离线、含其他子服）的邮箱
+- **跨服发奖**：`/yizhan mail send` / `/yizhan mail give` 可把物品直接投递到任意玩家（含离线、含其他子服）的邮箱；`mail give` 支持自定义通知消息，方便命令方块发奖时附带活动说明
 - **每日奖励**：玩家每天首次登录时，自动把奖励投递到自己的邮箱（原版材质 + 登记模板物品两种来源叠加）
 - **快递费**：路由可配置快递费，发货界面有独立费用槽，放入匹配 `currency-key`（可选 `currency-value`）的货币物品才能发货
 
@@ -104,7 +104,7 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | `/yizhan info <名称>` | 查看驿站详情 |
 | `/yizhan mailbox <bind\|unbind\|info>` | 绑定/解绑/查看自己的邮箱方块（需 `yizhan.mail`） |
 | `/yizhan mail send <玩家> [数量]` | 把主手物品发到目标玩家邮箱，省略数量则发整组 |
-| `/yizhan mail give <玩家> <物品ID\|代号> <数量>` | 发送指定物品到目标玩家邮箱；`<物品ID>` 可填原版材质名或 `/yz item add` 登记的代号 |
+| `/yizhan mail give <玩家> <物品ID\|代号> <数量> [消息]` | 发送指定物品到目标玩家邮箱；`<物品ID>` 可填原版材质名或 `/yz item add` 登记的代号；可选 `[消息]` 自定义通知内容（支持 `&` 颜色码和 `%amount%` `%item%` 占位符），不填则用 `messages.mail-received` |
 | `/yizhan dailyreward add` | 把主手物品登记为每日奖励模板（支持 Nexo 等自定义物品，需 `yizhan.admin`） |
 | `/yizhan dailyreward list` | 查看已登记的每日奖励模板 |
 | `/yizhan dailyreward remove <槽位>` | 移除某个登记的每日奖励模板 |
