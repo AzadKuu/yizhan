@@ -79,6 +79,8 @@ public interface Storage extends AutoCloseable {
 
     List<Notification> claimNotifications(UUID player);
 
+    Map<UUID, List<Notification>> claimNotificationsBatch(List<UUID> players);
+
     Map<Integer, ItemStack> loadMailboxItems(UUID player);
 
     void saveMailboxItems(UUID player, Map<Integer, ItemStack> items, Collection<Integer> clearSlots);

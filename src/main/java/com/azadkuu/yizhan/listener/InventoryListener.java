@@ -91,7 +91,7 @@ public class InventoryListener implements Listener {
             return;
         }
 
-        if (holder.getView() == StationHolder.View.SEND && raw == GuiManager.SLOT_FEE) {
+        if (holder.getView() == StationHolder.View.SEND && raw == GuiManager.slotFee(holder.getInventory().getSize())) {
             event.setCancelled(true);
             handleFeeSlot(event, player, holder);
             return;
@@ -105,7 +105,7 @@ public class InventoryListener implements Listener {
         if (holder.getView() == StationHolder.View.RECEIVE) {
             if (isInsert(event, guiSize)) {
                 event.setCancelled(true);
-                Msg.send(player, config.getPrefix(), "&c收件箱只能取出，不能放入");
+                Msg.send(player, config.getPrefix(), config.getReceiveOnlyMessage());
             } else {
                 holder.setDirty(true);
             }
@@ -115,7 +115,7 @@ public class InventoryListener implements Listener {
         ItemStack incoming = resolveIncoming(event, guiSize);
         if (incoming != null && filter.isBlocked(incoming)) {
             event.setCancelled(true);
-            sendItemBlocked(player, incoming, " &c被识别为自定义物品，禁止运输");
+            sendItemBlocked(player, incoming, config.getItemBlockedMessage());
         }
     }
 
@@ -138,11 +138,11 @@ public class InventoryListener implements Listener {
             return;
         }
         if (holder.getView() == StationHolder.View.RECEIVE) {
-            Msg.send(player, config.getPrefix(), "&c收件箱只能取出，不能放入");
+            Msg.send(player, config.getPrefix(), config.getReceiveOnlyMessage());
             return;
         }
         if (filter.isBlocked(current)) {
-            sendItemBlocked(player, current, " &c被识别为自定义物品，禁止运输");
+            sendItemBlocked(player, current, config.getItemBlockedMessage());
             return;
         }
         ItemStack leftover = moveInto(top, 0, holder.getStation().getSize(), current);
@@ -213,7 +213,7 @@ public class InventoryListener implements Listener {
             storage.claimDiscardedItem(id);
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("claim discarded item " + id + " failed: " + ex.getMessage());
-            Msg.send(player, config.getPrefix(), "&c领取失败，请稍后重试");
+            Msg.send(player, config.getPrefix(), config.getClaimFailedMessage());
             return;
         }
         giveOrDrop(player, item.clone());
@@ -264,7 +264,7 @@ public class InventoryListener implements Listener {
             return;
         }
         for (int slot : event.getRawSlots()) {
-            if (slot < guiSize && (isControlSlot(slot, holder) || slot == GuiManager.SLOT_FEE
+            if (slot < guiSize && (isControlSlot(slot, holder) || slot == GuiManager.slotFee(guiSize)
                     || slot >= holder.getStation().getSize())) {
                 event.setCancelled(true);
                 return;
@@ -276,7 +276,7 @@ public class InventoryListener implements Listener {
         }
         if (filter.isBlocked(event.getOldCursor())) {
             event.setCancelled(true);
-            sendItemBlocked((Player) event.getWhoClicked(), event.getOldCursor(), " &c被识别为自定义物品，禁止运输");
+            sendItemBlocked((Player) event.getWhoClicked(), event.getOldCursor(), config.getItemBlockedMessage());
         }
     }
 
@@ -326,19 +326,20 @@ public class InventoryListener implements Listener {
     }
 
     private void handleControl(Player player, StationHolder holder, int raw) {
-        if (raw == GuiManager.SLOT_CLOSE) {
+        int gui = holder.getInventory().getSize();
+        if (raw == GuiManager.slotClose(gui)) {
             player.closeInventory();
             return;
         }
-        if (raw == GuiManager.SLOT_SWITCH) {
+        if (raw == GuiManager.slotSwitch(gui)) {
             switchView(player, holder);
             return;
         }
-        if (raw == GuiManager.SLOT_ROUTE && holder.getView() == StationHolder.View.SEND) {
+        if (raw == GuiManager.slotRoute(gui) && holder.getView() == StationHolder.View.SEND) {
             cycleRoute(player, holder);
             return;
         }
-        if (raw == GuiManager.SLOT_ACTION) {
+        if (raw == GuiManager.slotAction(gui)) {
             if (holder.getView() == StationHolder.View.SEND) {
                 handleShip(player, holder);
             } else {
@@ -354,7 +355,7 @@ public class InventoryListener implements Listener {
         }
         ItemStack cursor = event.getCursor();
         boolean hasCursor = cursor != null && !cursor.getType().isAir();
-        String hint = "&c快递费槽只能放带 &f" + config.getCurrencyKey() + " &c键的货币物品";
+        String hint = "&c本站不收这个！";
 
         if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
             ItemStack current = event.getCurrentItem();
@@ -364,7 +365,7 @@ public class InventoryListener implements Listener {
             if (!filter.isCurrency(current)) {
                 Msg.send(player, config.getPrefix(), hint);
             } else if (stored != null) {
-                Msg.send(player, config.getPrefix(), "&7快递费槽已有物品，请先取出");
+                Msg.send(player, config.getPrefix(), config.getFeeSlotOccupiedMessage());
             } else {
                 holder.setFeeItem(current.clone());
                 event.setCurrentItem(null);
@@ -378,7 +379,7 @@ public class InventoryListener implements Listener {
             }
         } else if (stored == null) {
             Msg.send(player, config.getPrefix(), "&7快递费槽是空的，请放入带 &f"
-                    + config.getCurrencyKey() + " &7键的货币物品");
+                    + config.getCurrencyKey() + " &7键的" + config.getCurrencyName());
         } else {
             holder.setFeeItem(null);
             event.setCursor(stored);
@@ -389,14 +390,14 @@ public class InventoryListener implements Listener {
 
     private void cycleRoute(Player player, StationHolder holder) {
         if (holder.getRoutes().size() <= 1) {
-            Msg.send(player, config.getPrefix(), "&7当前只有一个可用路由");
+            Msg.send(player, config.getPrefix(), config.getRouteSingleMessage());
             return;
         }
         holder.setSelectedRoute(holder.getSelectedRoute() + 1);
         guiManager.render(holder);
         player.updateInventory();
         Route route = holder.getRoutes().get(Math.floorMod(holder.getSelectedRoute(), holder.getRoutes().size()));
-        Msg.send(player, config.getPrefix(), "&7当前目的地已切换为 &f" + route.getToStation());
+        Msg.send(player, config.getPrefix(), config.getRouteSwitchedMessage().replace("%station%", route.getToStation()));
     }
 
     private void switchView(Player player, StationHolder holder) {
@@ -412,7 +413,7 @@ public class InventoryListener implements Listener {
     private void handleShip(Player player, StationHolder holder) {
         List<Route> routes = holder.getRoutes();
         if (routes.isEmpty()) {
-            Msg.send(player, config.getPrefix(), "&c本站未配置路由，无法发货");
+            Msg.send(player, config.getPrefix(), config.getNoRouteMessage());
             return;
         }
         Route route = routes.get(Math.floorMod(holder.getSelectedRoute(), routes.size()));
@@ -421,12 +422,13 @@ public class InventoryListener implements Listener {
         if (fee > 0) {
             if (feeItem == null || feeItem.getType().isAir() || !filter.isCurrency(feeItem)) {
                 Msg.send(player, config.getPrefix(), "&c本线路需要 &f" + fee
-                        + " &c个货币物品作为快递费，请放入快递费槽");
+                        + " &c" + config.getCurrencyName() + "作为快递费，请放入快递费槽");
                 return;
             }
             if (feeItem.getAmount() < fee) {
-                Msg.send(player, config.getPrefix(), "&c快递费不足，需要 &f" + fee
-                        + " &c个，当前只有 &f" + feeItem.getAmount() + " &c个");
+                Msg.send(player, config.getPrefix(), config.getFeeInsufficientMessage()
+                        .replace("%need%", String.valueOf(fee))
+                        .replace("%have%", String.valueOf(feeItem.getAmount())));
                 return;
             }
         }
@@ -439,22 +441,28 @@ public class InventoryListener implements Listener {
                 continue;
             }
             if (filter.isBlocked(item)) {
-                player.sendMessage(Msg.join(
-                        Msg.component(config.getPrefix()),
-                        Msg.component("&c发货区存在自定义物品 "),
-                        filter.nameComponent(item),
-                        Msg.component(" &c，已阻止发货")));
+                String blockedMsg = config.getItemBlockedInSendMessage();
+                int idx = blockedMsg.indexOf("%item%");
+                if (idx >= 0) {
+                    player.sendMessage(Msg.join(
+                            Msg.component(config.getPrefix()),
+                            Msg.component(blockedMsg.substring(0, idx)),
+                            filter.nameComponent(item),
+                            Msg.component(blockedMsg.substring(idx + 6))));
+                } else {
+                    Msg.send(player, config.getPrefix(), blockedMsg);
+                }
                 return;
             }
             items.put(i, item.clone());
         }
         if (items.isEmpty()) {
-            Msg.send(player, config.getPrefix(), "&7发货区是空的");
+            Msg.send(player, config.getPrefix(), config.getShipEmptyMessage());
             return;
         }
         Station target = storage.getStation(route.getToStation());
         if (target == null) {
-            Msg.send(player, config.getPrefix(), "&c目的地驿站 &f" + route.getToStation() + " &c不存在");
+            Msg.send(player, config.getPrefix(), config.getStationNotFoundMessage().replace("%station%", route.getToStation()));
             return;
         }
         int capacity = target.getSize();
@@ -466,15 +474,17 @@ public class InventoryListener implements Listener {
             pending = storage.countInTransitStacks(route.getToStation());
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("检查目标驿站容量失败: " + ex.getMessage());
-            Msg.send(player, config.getPrefix(), "&c发货失败，请稍后重试");
+            Msg.send(player, config.getPrefix(), config.getShipFailedMessage());
             return;
         }
         if (occupied + pending + need > capacity) {
             int freeLeft = Math.max(0, capacity - occupied - pending);
-            Msg.send(player, config.getPrefix(), "&c目标驿站 &f" + route.getToStation()
-                    + " &c容量不足：剩余 &f" + freeLeft + " &c格，本次需要 &f" + need
-                    + " &c格（收件箱已用 &f" + occupied + " &c，在途 &f" + pending
-                    + " &c）。请先清理目标驿站收件箱");
+            Msg.send(player, config.getPrefix(), config.getStationCapacityExceededMessage()
+                    .replace("%station%", route.getToStation())
+                    .replace("%free%", String.valueOf(freeLeft))
+                    .replace("%need%", String.valueOf(need))
+                    .replace("%used%", String.valueOf(occupied))
+                    .replace("%pending%", String.valueOf(pending)));
             return;
         }
         long shipmentId;
@@ -482,7 +492,7 @@ public class InventoryListener implements Listener {
             shipmentId = transport.ship(holder.getStation(), route, player.getUniqueId(), items);
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("ship failed: " + ex.getMessage());
-            Msg.send(player, config.getPrefix(), "&c发货失败，请稍后重试");
+            Msg.send(player, config.getPrefix(), config.getShipFailedMessage());
             return;
         }
         holder.setShipped(true);
@@ -497,7 +507,7 @@ public class InventoryListener implements Listener {
                 giveOrDrop(player, back);
             }
             holder.setFeeItem(null);
-            inventory.setItem(GuiManager.SLOT_FEE, null);
+            inventory.setItem(GuiManager.slotFee(inventory.getSize()), null);
         }
         player.closeInventory();
         int buffer = transport.resolveBufferSeconds(route, holder.getStation());
@@ -524,7 +534,7 @@ public class InventoryListener implements Listener {
         }
         if (moved > 0) {
             holder.setDirty(true);
-            Msg.send(player, config.getPrefix(), "&a已领取 &f" + moved + " &a组物品");
+            Msg.send(player, config.getPrefix(), config.getClaimSuccessMessage().replace("%amount%", String.valueOf(moved)));
         }
     }
 
@@ -544,9 +554,9 @@ public class InventoryListener implements Listener {
         guiManager.renderMailbox(holder);
         player.updateInventory();
         if (moved > 0) {
-            Msg.send(player, config.getPrefix(), "&a已领取 &f" + moved + " &a组物品");
+            Msg.send(player, config.getPrefix(), config.getClaimSuccessMessage().replace("%amount%", String.valueOf(moved)));
         } else {
-            Msg.send(player, config.getPrefix(), "&7邮箱是空的");
+            Msg.send(player, config.getPrefix(), config.getMailboxEmptyMessage());
         }
     }
 
@@ -576,7 +586,7 @@ public class InventoryListener implements Listener {
             } catch (RuntimeException ex) {
                 plugin.getLogger().warning("重新领取邮件失败: " + ex.getMessage());
                 Bukkit.getScheduler().runTask(plugin,
-                        () -> Msg.send(player, config.getPrefix(), "&c重新领取失败，请稍后重试"));
+                        () -> Msg.send(player, config.getPrefix(), config.getReclaimFailedMessage()));
                 return;
             }
             final int movedFinal = moved;
@@ -598,10 +608,12 @@ public class InventoryListener implements Listener {
                 guiManager.renderMailbox(holder);
                 player.updateInventory();
                 if (movedFinal > 0) {
-                    Msg.send(player, config.getPrefix(), "&a已补入 &f" + movedFinal + " &a件邮件"
-                            + (pendingFinal > 0 ? "&7，仍有 &f" + pendingFinal + " &7件待领取（邮箱已满）" : ""));
+                    Msg.send(player, config.getPrefix(), config.getReclaimSuccessMessage()
+                            .replace("%amount%", String.valueOf(movedFinal))
+                            + (pendingFinal > 0 ? config.getReclaimPendingMessage()
+                                    .replace("%pending%", String.valueOf(pendingFinal)) : ""));
                 } else {
-                    Msg.send(player, config.getPrefix(), "&7没有可补入的邮件，请先清出邮箱空位");
+                    Msg.send(player, config.getPrefix(), config.getReclaimNoneMessage());
                 }
             });
         });
@@ -629,7 +641,7 @@ public class InventoryListener implements Listener {
         ItemStack feeItem = holder.getFeeItem();
         if (feeItem != null && !feeItem.getType().isAir()) {
             holder.setFeeItem(null);
-            inventory.setItem(GuiManager.SLOT_FEE, null);
+            inventory.setItem(GuiManager.slotFee(inventory.getSize()), null);
             giveOrDrop(player, feeItem);
         }
     }
@@ -675,7 +687,7 @@ public class InventoryListener implements Listener {
         try {
             int newVersion = storage.saveStationItems(holder.getStation().getId(), items, holder.getBaseVersion());
             if (newVersion < 0) {
-                Msg.send(player, config.getPrefix(), "&c收件箱内容已被其他操作更新，本次更改未保存");
+                Msg.send(player, config.getPrefix(), config.getSaveConflictMessage());
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     if (player.isOnline()) {
                         guiManager.open(player, storage.getStation(holder.getStation().getId()), StationHolder.View.RECEIVE);
@@ -687,7 +699,7 @@ public class InventoryListener implements Listener {
             }
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("saveReceive failed: " + ex.getMessage());
-            Msg.send(player, config.getPrefix(), "&c保存收件箱失败");
+            Msg.send(player, config.getPrefix(), config.getSaveFailedMessage());
         }
     }
 
@@ -695,8 +707,9 @@ public class InventoryListener implements Listener {
         if (holder.getView() == StationHolder.View.CHOOSER) {
             return raw == GuiManager.CHOOSER_SEND || raw == GuiManager.CHOOSER_RECEIVE || raw == 22;
         }
-        return raw == GuiManager.SLOT_CLOSE || raw == GuiManager.SLOT_SWITCH
-                || raw == GuiManager.SLOT_ROUTE || raw == GuiManager.SLOT_ACTION || raw == GuiManager.SLOT_INFO;
+        int gui = holder.getInventory().getSize();
+        return raw == GuiManager.slotClose(gui) || raw == GuiManager.slotSwitch(gui)
+                || raw == GuiManager.slotRoute(gui) || raw == GuiManager.slotAction(gui) || raw == GuiManager.slotInfo(gui);
     }
 
     private boolean isInsert(InventoryClickEvent event, int guiSize) {

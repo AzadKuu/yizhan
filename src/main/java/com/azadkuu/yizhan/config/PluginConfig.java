@@ -24,6 +24,40 @@ public class PluginConfig {
     private String shipArrivedMessage;
     private String shipWaitingMessage;
     private String shipDiscardedMessage;
+    private String mailReceivedMessage;
+    private String mailReceivedFromMessage;
+    private String mailSentMessage;
+    private String itemBlockedMessage;
+    private String itemBlockedInSendMessage;
+    private String shipEmptyMessage;
+    private String noRouteMessage;
+    private String shipFailedMessage;
+    private String stationNotFoundMessage;
+    private String stationCapacityExceededMessage;
+    private String claimSuccessMessage;
+    private String mailboxEmptyMessage;
+    private String claimFailedMessage;
+    private String receiveOnlyMessage;
+    private String feeSlotOccupiedMessage;
+    private String feeInsufficientMessage;
+    private String routeSingleMessage;
+    private String routeSwitchedMessage;
+    private String reclaimFailedMessage;
+    private String reclaimSuccessMessage;
+    private String reclaimPendingMessage;
+    private String reclaimNoneMessage;
+    private String saveConflictMessage;
+    private String saveFailedMessage;
+    private String noPermissionMessage;
+    private String playerOnlyMessage;
+    private String stationNotExistMessage;
+    private String stationExistsMessage;
+    private String noItemInHandMessage;
+    private String amountInvalidMessage;
+    private String amountPositiveMessage;
+    private String playerNotFoundMessage;
+    private String itemInvalidMessage;
+    private String configReloadedMessage;
 
     private String dbHost;
     private int dbPort;
@@ -41,6 +75,7 @@ public class PluginConfig {
     private final List<DailyRewardItem> dailyRewardItems = new ArrayList<>();
     private String currencyKey;
     private String currencyValue;
+    private String currencyName;
 
     private final Set<String> blockedNamespaces = new HashSet<>();
     private final Set<String> blockedKeys = new HashSet<>();
@@ -66,6 +101,44 @@ public class PluginConfig {
                 "&e目标驿站 &f%station% &e已满，包裹 &7#%id% &e正在等待空位，请提醒对方清理收件箱");
         this.shipDiscardedMessage = cfg.getString("messages.ship-discarded",
                 "&c目标驿站 &f%station% &c已满超过 &f%hours% &c小时，包裹 &7#%id% &c投递失败已暂存，请联系管理员领取");
+        this.mailReceivedMessage = cfg.getString("messages.mail-received",
+                "&a你收到了邮件: &f%amount% &a个 &f%item%");
+        this.mailReceivedFromMessage = cfg.getString("messages.mail-received-from",
+                "&a你收到了邮件: &f%amount% &a个 &f%item%&a，来自 &f%sender%");
+        this.mailSentMessage = cfg.getString("messages.mail-sent",
+                "&a已发送 &f%amount% &a个 &f%item% &a到 &f%target% &a的邮箱");
+        this.itemBlockedMessage = cfg.getString("messages.item-blocked", " &c被识别为自定义物品，禁止运输");
+        this.itemBlockedInSendMessage = cfg.getString("messages.item-blocked-in-send", "&c发货区存在自定义物品 &f%item% &c，已阻止发货");
+        this.shipEmptyMessage = cfg.getString("messages.ship-empty", "&7发货区是空的");
+        this.noRouteMessage = cfg.getString("messages.no-route", "&c本站未配置路由，无法发货");
+        this.shipFailedMessage = cfg.getString("messages.ship-failed", "&c发货失败，请稍后重试");
+        this.stationNotFoundMessage = cfg.getString("messages.station-not-found", "&c目的地驿站 &f%station% &c不存在");
+        this.stationCapacityExceededMessage = cfg.getString("messages.station-capacity-exceeded",
+                "&c目标驿站 &f%station% &c容量不足：剩余 &f%free% &c格，本次需要 &f%need% &c格（收件箱已用 &f%used% &c，在途 &f%pending% &c）。请先清理目标驿站收件箱");
+        this.claimSuccessMessage = cfg.getString("messages.claim-success", "&a已领取 &f%amount% &a组物品");
+        this.mailboxEmptyMessage = cfg.getString("messages.mailbox-empty", "&7邮箱是空的");
+        this.claimFailedMessage = cfg.getString("messages.claim-failed", "&c领取失败，请稍后重试");
+        this.receiveOnlyMessage = cfg.getString("messages.receive-only", "&c收件箱只能取出，不能放入");
+        this.feeSlotOccupiedMessage = cfg.getString("messages.fee-slot-occupied", "&7快递费槽已有物品，请先取出");
+        this.feeInsufficientMessage = cfg.getString("messages.fee-insufficient", "&c快递费不足，需要 &f%need% &c个，当前只有 &f%have% &c个");
+        this.routeSingleMessage = cfg.getString("messages.route-single", "&7当前只有一个可用路由");
+        this.routeSwitchedMessage = cfg.getString("messages.route-switched", "&7当前目的地已切换为 &f%station%");
+        this.reclaimFailedMessage = cfg.getString("messages.reclaim-failed", "&c重新领取失败，请稍后重试");
+        this.reclaimSuccessMessage = cfg.getString("messages.reclaim-success", "&a已补入 &f%amount% &a件邮件");
+        this.reclaimPendingMessage = cfg.getString("messages.reclaim-pending", "&7，仍有 &f%pending% &7件待领取（邮箱已满）");
+        this.reclaimNoneMessage = cfg.getString("messages.reclaim-none", "&7没有可补入的邮件，请先清出邮箱空位");
+        this.saveConflictMessage = cfg.getString("messages.save-conflict", "&c收件箱内容已被其他操作更新，本次更改未保存");
+        this.saveFailedMessage = cfg.getString("messages.save-failed", "&c保存收件箱失败");
+        this.noPermissionMessage = cfg.getString("messages.no-permission", "&c没有权限");
+        this.playerOnlyMessage = cfg.getString("messages.player-only", "&c该命令只能由玩家执行");
+        this.stationNotExistMessage = cfg.getString("messages.station-not-exist", "&c驿站 &f%station% &c不存在");
+        this.stationExistsMessage = cfg.getString("messages.station-exists", "&c驿站 &f%station% &c已存在");
+        this.noItemInHandMessage = cfg.getString("messages.no-item-in-hand", "&c主手没有物品");
+        this.amountInvalidMessage = cfg.getString("messages.amount-invalid", "&c数量必须是整数");
+        this.amountPositiveMessage = cfg.getString("messages.amount-positive", "&c数量必须大于 0");
+        this.playerNotFoundMessage = cfg.getString("messages.player-not-found", "&c找不到玩家 &f%player% &c（可用玩家名或 UUID；从未进服的玩家请用 UUID）");
+        this.itemInvalidMessage = cfg.getString("messages.item-invalid", "&c无效的物品ID或代号: &f%item%");
+        this.configReloadedMessage = cfg.getString("messages.config-reloaded", "&a配置已重载");
 
         this.dbHost = cfg.getString("database.host", "127.0.0.1");
         this.dbPort = cfg.getInt("database.port", 3306);
@@ -152,6 +225,9 @@ public class PluginConfig {
         String currencyValue = cfg.getString("ship-fee.currency-value", "");
         this.currencyValue = currencyValue == null || currencyValue.isBlank()
                 ? null : currencyValue.trim();
+        String currencyName = cfg.getString("ship-fee.currency-name", "货币物品");
+        this.currencyName = currencyName == null || currencyName.isBlank()
+                ? "货币物品" : currencyName;
     }
 
     private int clampSize(int value) {
@@ -212,6 +288,50 @@ public class PluginConfig {
     public String getShipDiscardedMessage() {
         return shipDiscardedMessage;
     }
+
+    public String getMailReceivedMessage() {
+        return mailReceivedMessage;
+    }
+
+    public String getMailReceivedFromMessage() {
+        return mailReceivedFromMessage;
+    }
+
+    public String getMailSentMessage() {
+        return mailSentMessage;
+    }
+
+    public String getItemBlockedMessage() { return itemBlockedMessage; }
+    public String getItemBlockedInSendMessage() { return itemBlockedInSendMessage; }
+    public String getShipEmptyMessage() { return shipEmptyMessage; }
+    public String getNoRouteMessage() { return noRouteMessage; }
+    public String getShipFailedMessage() { return shipFailedMessage; }
+    public String getStationNotFoundMessage() { return stationNotFoundMessage; }
+    public String getStationCapacityExceededMessage() { return stationCapacityExceededMessage; }
+    public String getClaimSuccessMessage() { return claimSuccessMessage; }
+    public String getMailboxEmptyMessage() { return mailboxEmptyMessage; }
+    public String getClaimFailedMessage() { return claimFailedMessage; }
+    public String getReceiveOnlyMessage() { return receiveOnlyMessage; }
+    public String getFeeSlotOccupiedMessage() { return feeSlotOccupiedMessage; }
+    public String getFeeInsufficientMessage() { return feeInsufficientMessage; }
+    public String getRouteSingleMessage() { return routeSingleMessage; }
+    public String getRouteSwitchedMessage() { return routeSwitchedMessage; }
+    public String getReclaimFailedMessage() { return reclaimFailedMessage; }
+    public String getReclaimSuccessMessage() { return reclaimSuccessMessage; }
+    public String getReclaimPendingMessage() { return reclaimPendingMessage; }
+    public String getReclaimNoneMessage() { return reclaimNoneMessage; }
+    public String getSaveConflictMessage() { return saveConflictMessage; }
+    public String getSaveFailedMessage() { return saveFailedMessage; }
+    public String getNoPermissionMessage() { return noPermissionMessage; }
+    public String getPlayerOnlyMessage() { return playerOnlyMessage; }
+    public String getStationNotExistMessage() { return stationNotExistMessage; }
+    public String getStationExistsMessage() { return stationExistsMessage; }
+    public String getNoItemInHandMessage() { return noItemInHandMessage; }
+    public String getAmountInvalidMessage() { return amountInvalidMessage; }
+    public String getAmountPositiveMessage() { return amountPositiveMessage; }
+    public String getPlayerNotFoundMessage() { return playerNotFoundMessage; }
+    public String getItemInvalidMessage() { return itemInvalidMessage; }
+    public String getConfigReloadedMessage() { return configReloadedMessage; }
 
     public int getShipmentDiscardAfterHours() {
         return shipmentDiscardAfterHours;
@@ -295,6 +415,10 @@ public class PluginConfig {
 
     public String getCurrencyValue() {
         return currencyValue;
+    }
+
+    public String getCurrencyName() {
+        return currencyName;
     }
 
     public List<String> describeFilter() {

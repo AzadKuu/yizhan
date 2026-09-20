@@ -91,11 +91,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void bind(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         if (!player.hasPermission("yizhan.bind")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 3) {
@@ -144,7 +144,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void unbind(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.bind")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 2) {
@@ -162,7 +162,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void route(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.route")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 3) {
@@ -236,12 +236,12 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         int effective = transport.resolveBufferSeconds(route, fromStation);
         Msg.send(sender, config.getPrefix(), "&a已保存路由 &f" + from + " &7-> &f" + to
                 + " &a缓冲 &f" + guiManager.formatSeconds(effective)
-                + " &a快递费 &f" + (fee > 0 ? fee + " 个货币物品" : "无"));
+                + " &a快递费 &f" + (fee > 0 ? fee + " " + config.getCurrencyName() : "无"));
     }
 
     private void fee(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.route")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 4) {
@@ -267,16 +267,16 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         route.setFee(fee);
         storage.saveRoute(route);
         Msg.send(sender, config.getPrefix(), "&a路由 &f" + args[1] + " &7-> &f" + args[2]
-                + " &a的快递费已设为 &f" + (fee > 0 ? fee + " 个货币物品" : "无"));
+                + " &a的快递费已设为 &f" + (fee > 0 ? fee + " " + config.getCurrencyName() : "无"));
     }
 
     private void mailbox(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         if (!player.hasPermission("yizhan.mail")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 2) {
@@ -320,7 +320,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void dailyReward(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.admin")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 2) {
@@ -343,7 +343,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void dailyRewardAdd(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         ItemStack hand = player.getInventory().getItemInMainHand();
@@ -480,11 +480,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void mailSend(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.mail.send")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         if (args.length < 3) {
@@ -493,13 +493,12 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         }
         UUID target = resolveUuid(args[2]);
         if (target == null) {
-            Msg.send(sender, config.getPrefix(), "&c找不到玩家 &f" + args[2]
-                    + " &c（可用玩家名或 UUID；从未进服的玩家请用 UUID）");
+            Msg.send(sender, config.getPrefix(), config.getPlayerNotFoundMessage().replace("%player%", args[2]));
             return;
         }
         ItemStack hand = player.getInventory().getItemInMainHand();
         if (hand == null || hand.getType().isAir()) {
-            Msg.send(sender, config.getPrefix(), "&c主手没有物品");
+            Msg.send(sender, config.getPrefix(), config.getNoItemInHandMessage());
             return;
         }
         int amount = hand.getAmount();
@@ -507,11 +506,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             try {
                 amount = Integer.parseInt(args[3]);
             } catch (NumberFormatException ex) {
-                Msg.send(sender, config.getPrefix(), "&c数量必须是整数");
+                Msg.send(sender, config.getPrefix(), config.getAmountInvalidMessage());
                 return;
             }
             if (amount < 1) {
-                Msg.send(sender, config.getPrefix(), "&c数量必须大于 0");
+                Msg.send(sender, config.getPrefix(), config.getAmountPositiveMessage());
                 return;
             }
             amount = Math.min(amount, hand.getAmount());
@@ -526,14 +525,26 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             back.setAmount(remain);
             player.getInventory().setItemInMainHand(back);
         }
+        String displayName;
+        if (send.hasItemMeta() && send.getItemMeta().hasDisplayName()) {
+            displayName = send.getItemMeta().getDisplayName().replace('\u00A7', '&');
+        } else {
+            displayName = send.getType().name().toLowerCase(Locale.ROOT);
+        }
         mailboxService.deliver(target, List.of(send),
-                "&a你收到了邮件: " + amount + " 个物品，来自 " + player.getName());
-        Msg.send(sender, config.getPrefix(), "&a已发送 &f" + amount + " &a个物品到 &f" + args[2] + " &a的邮箱");
+                config.getMailReceivedFromMessage()
+                        .replace("%amount%", String.valueOf(amount))
+                        .replace("%item%", displayName)
+                        .replace("%sender%", player.getName()));
+        Msg.send(sender, config.getPrefix(), config.getMailSentMessage()
+                .replace("%amount%", String.valueOf(amount))
+                .replace("%item%", displayName)
+                .replace("%target%", args[2]));
     }
 
     private void mailGive(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.mail.send")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 5) {
@@ -542,19 +553,18 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         }
         UUID target = resolveUuid(args[2]);
         if (target == null) {
-            Msg.send(sender, config.getPrefix(), "&c找不到玩家 &f" + args[2]
-                    + " &c（可用玩家名或 UUID；从未进服的玩家请用 UUID）");
+            Msg.send(sender, config.getPrefix(), config.getPlayerNotFoundMessage().replace("%player%", args[2]));
             return;
         }
         int amount;
         try {
             amount = Integer.parseInt(args[4]);
         } catch (NumberFormatException ex) {
-            Msg.send(sender, config.getPrefix(), "&c数量必须是整数");
+            Msg.send(sender, config.getPrefix(), config.getAmountInvalidMessage());
             return;
         }
         if (amount < 1) {
-            Msg.send(sender, config.getPrefix(), "&c数量必须大于 0");
+            Msg.send(sender, config.getPrefix(), config.getAmountPositiveMessage());
             return;
         }
         ItemStack template = storage.getItemTemplate(args[3]);
@@ -569,20 +579,33 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                 templateItems.add(copy);
                 remaining -= n;
             }
-            mailboxService.deliver(target, templateItems, "&a你收到了邮件: " + amount + " 个 " + args[3]);
-            Msg.send(sender, config.getPrefix(), "&a已发送 &f" + amount + " &a个 &f" + args[3] + " &a到 &f" + args[2] + " &a的邮箱");
+            String displayName = args[3];
+            if (template.hasItemMeta() && template.getItemMeta().hasDisplayName()) {
+                displayName = template.getItemMeta().getDisplayName().replace('\u00A7', '&');
+            }
+            mailboxService.deliver(target, templateItems, config.getMailReceivedMessage()
+                    .replace("%amount%", String.valueOf(amount))
+                    .replace("%item%", displayName));
+            Msg.send(sender, config.getPrefix(), config.getMailSentMessage()
+                    .replace("%amount%", String.valueOf(amount))
+                    .replace("%item%", displayName)
+                    .replace("%target%", args[2]));
             return;
         }
         Material material = Material.matchMaterial(args[3]);
         if (material == null || material.isAir()) {
-            Msg.send(sender, config.getPrefix(), "&c无效的物品ID或代号: &f" + args[3]);
+            Msg.send(sender, config.getPrefix(), config.getItemInvalidMessage().replace("%item%", args[3]));
             return;
         }
         List<ItemStack> items = buildStacks(material, amount);
-        mailboxService.deliver(target, items,
-                "&a你收到了邮件: " + amount + " 个 " + material.name().toLowerCase(Locale.ROOT));
-        Msg.send(sender, config.getPrefix(), "&a已发送 &f" + amount + " &a个 &f"
-                + material.name().toLowerCase(Locale.ROOT) + " &a到 &f" + args[2] + " &a的邮箱");
+        String matName = material.name().toLowerCase(Locale.ROOT);
+        mailboxService.deliver(target, items, config.getMailReceivedMessage()
+                .replace("%amount%", String.valueOf(amount))
+                .replace("%item%", matName));
+        Msg.send(sender, config.getPrefix(), config.getMailSentMessage()
+                .replace("%amount%", String.valueOf(amount))
+                .replace("%item%", matName)
+                .replace("%target%", args[2]));
     }
 
     @SuppressWarnings("deprecation")
@@ -616,7 +639,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void buffer(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.route")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 3) {
@@ -646,11 +669,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void open(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         if (!player.hasPermission("yizhan.open")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 2) {
@@ -698,11 +721,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
     @SuppressWarnings("deprecation")
     private void debugItem(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         if (!player.hasPermission("yizhan.admin")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         ItemStack item = player.getInventory().getItemInMainHand();
@@ -778,11 +801,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
     @SuppressWarnings("deprecation")
     private void debugPdc(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         if (!player.hasPermission("yizhan.admin")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         ItemStack item = player.getInventory().getItemInMainHand();
@@ -821,11 +844,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void itemAdd(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         if (!player.hasPermission("yizhan.admin")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 3) {
@@ -835,7 +858,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         String code = args[2].toLowerCase(Locale.ROOT);
         ItemStack item = player.getInventory().getItemInMainHand();
         if (item == null || item.getType().isAir()) {
-            Msg.send(sender, config.getPrefix(), "&c主手没有物品");
+            Msg.send(sender, config.getPrefix(), config.getNoItemInHandMessage());
             return;
         }
         storage.saveItemTemplate(code, item.clone());
@@ -857,7 +880,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void itemRemove(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.admin")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 3) {
@@ -874,11 +897,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void discarded(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            Msg.send(sender, config.getPrefix(), "&c该命令只能由玩家执行");
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
             return;
         }
         if (!player.hasPermission("yizhan.admin")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         guiManager.openDiscarded(player);
@@ -886,11 +909,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void reload(CommandSender sender) {
         if (!sender.hasPermission("yizhan.admin")) {
-            Msg.send(sender, config.getPrefix(), "&c没有权限");
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         plugin.reload();
-        Msg.send(sender, config.getPrefix(), "&a配置已重载");
+        Msg.send(sender, config.getPrefix(), config.getConfigReloadedMessage());
     }
 
     private void help(CommandSender sender) {

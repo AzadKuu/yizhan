@@ -1091,6 +1091,74 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
+    public Map<UUID, List<Notification>> claimNotificationsBatch(List<UUID> players) {
+        if (players == null || players.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<Notification>> result = new LinkedHashMap<>();
+        try (Connection c = conn()) {
+            c.setAutoCommit(false);
+            try {
+                List<Long> ids = new ArrayList<>();
+                StringBuilder selectSql = new StringBuilder("SELECT id, player_uuid, message, created_at FROM ")
+                        .append(prefix).append("notifications WHERE player_uuid IN (");
+                for (int i = 0; i < players.size(); i++) {
+                    if (i > 0) {
+                        selectSql.append(',');
+                    }
+                    selectSql.append('?');
+                }
+                selectSql.append(") AND delivered=0 ORDER BY id LIMIT 1000 FOR UPDATE");
+                try (PreparedStatement ps = c.prepareStatement(selectSql.toString())) {
+                    for (int i = 0; i < players.size(); i++) {
+                        ps.setString(i + 1, players.get(i).toString());
+                    }
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            long id = rs.getLong(1);
+                            UUID player = UUID.fromString(rs.getString(2));
+                            String message = rs.getString(3);
+                            long createdAt = rs.getLong(4);
+                            result.computeIfAbsent(player, k -> new ArrayList<>())
+                                    .add(new Notification(id, player, message, createdAt));
+                            ids.add(id);
+                        }
+                    }
+                }
+                if (!ids.isEmpty()) {
+                    StringBuilder updateSql = new StringBuilder("UPDATE ")
+                            .append(prefix).append("notifications SET delivered=1 WHERE id IN (");
+                    for (int i = 0; i < ids.size(); i++) {
+                        if (i > 0) {
+                            updateSql.append(',');
+                        }
+                        updateSql.append('?');
+                    }
+                    updateSql.append(')');
+                    try (PreparedStatement ps = c.prepareStatement(updateSql.toString())) {
+                        for (int i = 0; i < ids.size(); i++) {
+                            ps.setLong(i + 1, ids.get(i));
+                        }
+                        ps.executeUpdate();
+                    }
+                }
+                c.commit();
+                return result;
+            } catch (SQLException ex) {
+                c.rollback();
+                throw ex;
+            } finally {
+                try {
+                    c.setAutoCommit(true);
+                } catch (SQLException ignored) {
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("claimNotificationsBatch failed", ex);
+        }
+    }
+
+    @Override
     public Map<Integer, ItemStack> loadMailboxItems(UUID player) {
         Map<Integer, ItemStack> out = new TreeMap<>();
         String sql = "SELECT slot, item_data FROM " + prefix + "mailbox_items WHERE player_uuid=? ORDER BY slot";

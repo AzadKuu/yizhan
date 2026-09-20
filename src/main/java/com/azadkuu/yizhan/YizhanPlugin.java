@@ -13,6 +13,7 @@ import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.MysqlStorage;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.task.DeliveryTask;
+import com.azadkuu.yizhan.task.NotificationTask;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -26,6 +27,7 @@ public final class YizhanPlugin extends JavaPlugin {
     private MailboxService mailboxService;
     private GuiManager guiManager;
     private int deliveryTaskId = -1;
+    private int notificationTaskId = -1;
 
     @Override
     public void onEnable() {
@@ -69,6 +71,11 @@ public final class YizhanPlugin extends JavaPlugin {
                         new DeliveryTask(this, config, storage, guiManager, notificationService, 64), interval, interval)
                 .getTaskId();
 
+        this.notificationTaskId = getServer().getScheduler()
+                .runTaskTimerAsynchronously(this,
+                        new NotificationTask(this, notificationService), 100L, 100L)
+                .getTaskId();
+
         getLogger().info("Yizhan 已启用, server-id=" + config.getServerId()
                 + ", 轮询间隔=" + config.getPollIntervalSeconds() + "s"
                 + ", 默认缓冲=" + config.getDefaultBufferSeconds() + "s"
@@ -81,6 +88,10 @@ public final class YizhanPlugin extends JavaPlugin {
         if (deliveryTaskId != -1) {
             getServer().getScheduler().cancelTask(deliveryTaskId);
             deliveryTaskId = -1;
+        }
+        if (notificationTaskId != -1) {
+            getServer().getScheduler().cancelTask(notificationTaskId);
+            notificationTaskId = -1;
         }
         if (storage != null) {
             storage.close();

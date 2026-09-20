@@ -12,6 +12,40 @@ messages:
   ship-arrived: "&a你的包裹 &7#%id% &a已到达 &f%station% &a，请前往领取"
   ship-waiting: "&e目标驿站 &f%station% &e已满，包裹 &7#%id% &e正在等待空位，请提醒接收方清理收件箱"
   ship-discarded: "&c目标驿站 &f%station% &c已满超过 &f%hours% &c小时，包裹 &7#%id% &c投递失败已暂存，请联系管理员领取"
+  mail-received: "&a你收到了邮件: &f%amount% &a个 &f%item%"
+  mail-received-from: "&a你收到了邮件: &f%amount% &a个 &f%item%&a，来自 &f%sender%"
+  mail-sent: "&a已发送 &f%amount% &a个 &f%item% &a到 &f%target% &a的邮箱"
+  item-blocked: " &c被识别为禁运物品，禁止运输"
+  item-blocked-in-send: "&c发货区存在禁运物品 &f%item% &c，已阻止发货"
+  ship-empty: "&7发货区是空的"
+  no-route: "&c本站未配置路由，无法发货"
+  ship-failed: "&c发货失败，请稍后重试"
+  station-not-found: "&c目的地驿站 &f%station% &c不存在"
+  station-capacity-exceeded: "&c目标驿站 &f%station% &c容量不足：剩余 &f%free% &c格，本次需要 &f%need% &c格（收件箱已用 &f%used% &c，在途 &f%pending% &c）。请先清理目标驿站收件箱"
+  claim-success: "&a已领取 &f%amount% &a组物品"
+  mailbox-empty: "&7邮箱是空的"
+  claim-failed: "&c领取失败，请稍后重试"
+  receive-only: "&c收件箱只能取出，不能放入"
+  fee-slot-occupied: "&7快递费槽已有物品，请先取出"
+  fee-insufficient: "&c快递费不足，需要 &f%need% &c个，当前只有 &f%have% &c个"
+  route-single: "&7当前只有一个可用路由"
+  route-switched: "&7当前目的地已切换为 &f%station%"
+  reclaim-failed: "&c重新领取失败，请稍后重试"
+  reclaim-success: "&a已补入 &f%amount% &a件邮件"
+  reclaim-pending: "&7，仍有 &f%pending% &7件待领取（邮箱已满）"
+  reclaim-none: "&7没有可补入的邮件，请先清出邮箱空位"
+  save-conflict: "&c收件箱内容已被其他操作更新，本次更改未保存"
+  save-failed: "&c保存收件箱失败"
+  no-permission: "&c没有权限"
+  player-only: "&c该命令只能由玩家执行"
+  station-not-exist: "&c驿站 &f%station% &c不存在"
+  station-exists: "&c驿站 &f%station% &c已存在"
+  no-item-in-hand: "&c主手没有物品"
+  amount-invalid: "&c数量必须是整数"
+  amount-positive: "&c数量必须大于 0"
+  player-not-found: "&c找不到玩家 &f%player% &c（可用玩家名或 UUID；从未进服的玩家请用 UUID）"
+  item-invalid: "&c无效的物品ID或代号: &f%item%"
+  config-reloaded: "&a配置已重载"
 database:
   host: "127.0.0.1"
   port: 3306
@@ -50,6 +84,8 @@ daily-reward:
   #     amount: 1
   items: []
 ship-fee:
+  # 货币的显示名称，用于各种提示消息中（如"需要 3 个 NIJIJOJI币"）
+  currency-name: "货币物品"
   # 快递费货币的识别键：物品的 PDC / custom_data 键名包含它即视为货币
   currency-key: "currency"
   # 货币的值：留空表示只按键名判定（任何带该键的物品都算货币）；

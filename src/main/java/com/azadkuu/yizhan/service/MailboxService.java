@@ -11,7 +11,10 @@ import org.bukkit.inventory.ItemStack;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 public class MailboxService {
@@ -72,7 +75,7 @@ public class MailboxService {
                 if (stashed > 0) {
                     plugin.getLogger().warning("邮箱已满，每日奖励 " + stashed + " 件暂存待领取: " + uuid);
                 }
-                String message = config.getDailyRewardMessage();
+                String message = config.getDailyRewardMessage() + " &f(" + itemSummary(items) + ")";
                 if (stashed > 0) {
                     message = message + " &e（" + stashed + " 件已暂存，清理后点「重新领取」）";
                 }
@@ -118,5 +121,31 @@ public class MailboxService {
             }
         }
         return items;
+    }
+
+    private String itemSummary(List<ItemStack> items) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (ItemStack item : items) {
+            if (item == null || item.getType().isAir()) {
+                continue;
+            }
+            String name;
+            if (item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+                name = item.getItemMeta().getDisplayName();
+            } else {
+                name = item.getType().name().toLowerCase(Locale.ROOT);
+            }
+            counts.merge(name, item.getAmount(), Integer::sum);
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (!first) {
+                sb.append("&a, &f");
+            }
+            first = false;
+            sb.append("&f").append(entry.getValue()).append(" &a个 &f").append(entry.getKey());
+        }
+        return sb.toString();
     }
 }

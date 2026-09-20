@@ -29,15 +29,16 @@ import java.util.UUID;
 
 public class GuiManager {
 
-    public static final int SLOT_CLOSE = 45;
-    public static final int SLOT_FEE = 46;
-    public static final int SLOT_SWITCH = 47;
-    public static final int SLOT_ROUTE = 48;
-    public static final int SLOT_ACTION = 49;
-    public static final int SLOT_INFO = 53;
-
     public static final int CHOOSER_SEND = 11;
     public static final int CHOOSER_RECEIVE = 15;
+
+    public static int controlBase(int guiSize) { return guiSize - 9; }
+    public static int slotClose(int guiSize) { return guiSize - 9; }
+    public static int slotFee(int guiSize) { return guiSize - 8; }
+    public static int slotSwitch(int guiSize) { return guiSize - 7; }
+    public static int slotRoute(int guiSize) { return guiSize - 6; }
+    public static int slotAction(int guiSize) { return guiSize - 5; }
+    public static int slotInfo(int guiSize) { return guiSize - 1; }
 
     private final PluginConfig config;
     private final Storage storage;
@@ -81,7 +82,7 @@ public class GuiManager {
         if (view == StationHolder.View.SEND) {
             holder.setRoutes(storage.listRoutesFrom(station.getId()));
         }
-        int size = view == StationHolder.View.CHOOSER ? 27 : 54;
+        int size = view == StationHolder.View.CHOOSER ? 27 : station.getSize() + 9;
         Inventory inventory = Bukkit.createInventory(holder, size, Msg.component("&8驿站 &7· &6" + station.getTitle()));
         holder.setInventory(inventory);
         render(holder);
@@ -123,12 +124,13 @@ public class GuiManager {
 
     private void renderSend(StationHolder holder) {
         Inventory inventory = holder.getInventory();
+        int gui = inventory.getSize();
         Station station = holder.getStation();
         List<Route> routes = holder.getRoutes();
         if (routes.isEmpty()) {
-            inventory.setItem(SLOT_INFO, button(Material.BARRIER, "&c未配置路由",
+            inventory.setItem(slotInfo(gui), button(Material.BARRIER, "&c未配置路由",
                     "&7请管理员执行 &f/yz route " + station.getId() + " <目标站>"));
-            inventory.setItem(SLOT_CLOSE, button(Material.OAK_DOOR, "&e关闭"));
+            inventory.setItem(slotClose(gui), button(Material.OAK_DOOR, "&e关闭"));
             return;
         }
         Route route = routes.get(Math.floorMod(holder.getSelectedRoute(), routes.size()));
@@ -136,51 +138,52 @@ public class GuiManager {
         int inTransit = storage.listInTransitFrom(station.getId()).size();
         int fee = route.getFee();
         if (holder.getFeeItem() != null && !holder.getFeeItem().getType().isAir()) {
-            inventory.setItem(SLOT_FEE, holder.getFeeItem());
+            inventory.setItem(slotFee(gui), holder.getFeeItem());
         } else if (fee > 0) {
-            inventory.setItem(SLOT_FEE, button(Material.GOLD_NUGGET, "&e快递费槽",
-                    "&7本线路需要 &f" + fee + " &7个货币物品",
+            inventory.setItem(slotFee(gui), button(Material.GOLD_NUGGET, "&e快递费槽",
+                    "&7本线路需要 &f" + fee + " &7" + config.getCurrencyName(),
                     "&7把带 &f" + config.getCurrencyKey() + " &7键的物品放入此格"));
         }
-        inventory.setItem(SLOT_ROUTE, button(Material.COMPASS, "&b切换目的地",
+        inventory.setItem(slotRoute(gui), button(Material.COMPASS, "&b切换目的地",
                 "&7当前目的地: &f" + route.getToStation(),
                 "&7点击切换到下一个路由"));
-        inventory.setItem(SLOT_ACTION, button(Material.MINECART, "&a点击发货",
+        inventory.setItem(slotAction(gui), button(Material.MINECART, "&a点击发货",
                 "&7目的地: &f" + route.getToStation(),
                 "&7缓冲时间: &f" + formatSeconds(buffer),
-                fee > 0 ? "&7快递费: &f" + fee + " &7个货币物品" : "&7快递费: &f无",
+                fee > 0 ? "&7快递费: &f" + fee + " &7" + config.getCurrencyName() : "&7快递费: &f无",
                 "&7放入发货区的物品将进入在途状态"));
         if (station.getMode() == StationMode.BOTH) {
-            inventory.setItem(SLOT_SWITCH, button(Material.CHEST, "&e切换到收件箱"));
+            inventory.setItem(slotSwitch(gui), button(Material.CHEST, "&e切换到收件箱"));
         }
-        inventory.setItem(SLOT_INFO, button(Material.PAPER, "&f发货区",
+        inventory.setItem(slotInfo(gui), button(Material.PAPER, "&f发货区",
                 "&7在途发货单: &f" + inTransit,
-                fee > 0 ? "&7快递费槽: &f底部左起第 2 格 &7(需 &f" + fee + " &7个)" : "&7本线路免快递费",
+                fee > 0 ? "&7快递费槽: &f底部左起第 2 格 &7(需 &f" + fee + " " + config.getCurrencyName() + "&7)" : "&7本线路免快递费",
                 "&7默认缓冲: &f" + formatSeconds(config.getDefaultBufferSeconds())));
-        inventory.setItem(SLOT_CLOSE, button(Material.OAK_DOOR, "&e关闭"));
+        inventory.setItem(slotClose(gui), button(Material.OAK_DOOR, "&e关闭"));
     }
 
     private void renderReceive(StationHolder holder) {
         Inventory inventory = holder.getInventory();
+        int gui = inventory.getSize();
         Station station = holder.getStation();
         Map<Integer, ItemStack> items = storage.loadStationItems(station.getId());
         for (Map.Entry<Integer, ItemStack> entry : items.entrySet()) {
             int slot = entry.getKey();
-            if (slot >= 0 && slot < station.getSize() && slot < SLOT_CLOSE) {
+            if (slot >= 0 && slot < station.getSize()) {
                 inventory.setItem(slot, entry.getValue());
             }
         }
         holder.setBaseVersion(station.getVersion());
         List<Shipment> incoming = storage.listInTransitTo(station.getId());
-        inventory.setItem(SLOT_ACTION, button(Material.HOPPER, "&a全部领取",
+        inventory.setItem(slotAction(gui), button(Material.HOPPER, "&a全部领取",
                 "&7把收件箱内所有物品放入背包"));
         if (station.getMode() == StationMode.BOTH) {
-            inventory.setItem(SLOT_SWITCH, button(Material.MINECART, "&e切换到发货区"));
+            inventory.setItem(slotSwitch(gui), button(Material.MINECART, "&e切换到发货区"));
         }
-        inventory.setItem(SLOT_INFO, button(Material.PAPER, "&f收件箱",
+        inventory.setItem(slotInfo(gui), button(Material.PAPER, "&f收件箱",
                 "&7已用槽位: &f" + items.size() + "/" + station.getSize(),
                 "&7在途到达本站: &f" + incoming.size()));
-        inventory.setItem(SLOT_CLOSE, button(Material.OAK_DOOR, "&e关闭"));
+        inventory.setItem(slotClose(gui), button(Material.OAK_DOOR, "&e关闭"));
     }
 
     public void refreshStation(Station station) {

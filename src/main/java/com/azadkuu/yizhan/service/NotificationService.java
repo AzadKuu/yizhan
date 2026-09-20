@@ -7,7 +7,10 @@ import com.azadkuu.yizhan.util.Msg;
 import com.azadkuu.yizhan.util.TimeUtil;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class NotificationService {
@@ -31,6 +34,26 @@ public class NotificationService {
         List<Notification> pending = storage.claimNotifications(player.getUniqueId());
         for (Notification notification : pending) {
             Msg.send(player, config.getPrefix(), notification.getMessage());
+        }
+    }
+
+    public void flushAll(Collection<? extends Player> players) {
+        if (players == null || players.isEmpty()) {
+            return;
+        }
+        List<UUID> uuids = new ArrayList<>();
+        for (Player p : players) {
+            uuids.add(p.getUniqueId());
+        }
+        Map<UUID, List<Notification>> batch = storage.claimNotificationsBatch(uuids);
+        for (Player player : players) {
+            List<Notification> pending = batch.get(player.getUniqueId());
+            if (pending == null || pending.isEmpty()) {
+                continue;
+            }
+            for (Notification notification : pending) {
+                Msg.send(player, config.getPrefix(), notification.getMessage());
+            }
         }
     }
 
