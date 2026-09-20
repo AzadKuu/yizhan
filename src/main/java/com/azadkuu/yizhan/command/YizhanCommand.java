@@ -113,7 +113,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (storage.getStation(name) != null) {
-            Msg.send(sender, config.getPrefix(), "&c驿站 &f" + name + " &c已存在");
+            Msg.send(sender, config.getPrefix(), "&c驿站 &f" + name + " &c早就有了，换个名字吧！");
             return;
         }
         Block block = player.getTargetBlockExact(6);
@@ -124,7 +124,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Station occupied = storage.getStationAt(config.getServerId(), block.getWorld().getName(),
                 block.getX(), block.getY(), block.getZ());
         if (occupied != null) {
-            Msg.send(sender, config.getPrefix(), "&c该位置已被驿站 &f" + occupied.getId() + " &c绑定");
+            Msg.send(sender, config.getPrefix(), "&c这个位置已经被驿站 &f" + occupied.getId() + " &c占了");
             return;
         }
         Station station = new Station(name);
@@ -138,7 +138,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         station.setSize(config.getDefaultStationSize());
         station.setBufferSeconds(null);
         storage.saveStation(station);
-        Msg.send(sender, config.getPrefix(), "&a已绑定驿站 &f" + name + " &a模式 &f" + mode.name().toLowerCase(Locale.ROOT)
+        Msg.send(sender, config.getPrefix(), "&a驿站 &f" + name + " &a绑定成功！模式 &f" + mode.name().toLowerCase(Locale.ROOT)
                 + " &a位置 &f" + block.getWorld().getName() + " " + block.getX() + "," + block.getY() + "," + block.getZ());
     }
 
@@ -294,13 +294,13 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                 }
                 storage.savePlayerMailboxBlock(player.getUniqueId(), config.getServerId(),
                         block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
-                Msg.send(sender, config.getPrefix(), "&a已把 &f" + block.getWorld().getName() + " "
+                Msg.send(sender, config.getPrefix(), "&a搞定！&f" + block.getWorld().getName() + " "
                         + block.getX() + "," + block.getY() + "," + block.getZ()
-                        + " &a设为你的邮箱方块，右键即可打开邮箱");
+                        + " &a就是你的邮箱方块了，右键即可打开邮箱");
             }
             case "unbind" -> {
                 if (storage.deletePlayerMailboxBlock(player.getUniqueId(), config.getServerId())) {
-                    Msg.send(sender, config.getPrefix(), "&a已解除你的邮箱方块绑定");
+                    Msg.send(sender, config.getPrefix(), "&a邮箱方块已经解绑啦！");
                 } else {
                     Msg.send(sender, config.getPrefix(), "&7你尚未绑定邮箱方块");
                 }
@@ -308,9 +308,9 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "info" -> {
                 MailboxBlock bound = storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId());
                 if (bound == null) {
-                    Msg.send(sender, config.getPrefix(), "&7你尚未绑定邮箱方块，请用 &f/yz mailbox bind");
+                    Msg.send(sender, config.getPrefix(), "&7你还没绑定邮箱方块哦，用 &f/yz mailbox bind &7试试");
                 } else {
-                    Msg.send(sender, config.getPrefix(), "&a你的邮箱方块: &f" + bound.world() + " "
+                    Msg.send(sender, config.getPrefix(), "&a你的邮箱方块在这里: &f" + bound.world() + " "
                             + bound.x() + "," + bound.y() + "," + bound.z());
                 }
             }

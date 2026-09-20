@@ -44,7 +44,7 @@ public class InteractListener implements Listener {
                 && mailboxBlock.z() == block.getZ()) {
             event.setCancelled(true);
             if (!player.hasPermission("yizhan.mail")) {
-                Msg.send(player, config.getPrefix(), "&c你没有权限打开邮箱");
+                Msg.send(player, config.getPrefix(), "&c你没有开邮箱的权限哦！");
                 return;
             }
             guiManager.openMailbox(player);
@@ -57,7 +57,7 @@ public class InteractListener implements Listener {
         }
         event.setCancelled(true);
         if (!player.hasPermission("yizhan.open")) {
-            Msg.send(player, config.getPrefix(), "&c你没有权限打开驿站");
+            Msg.send(player, config.getPrefix(), "&c你没有开驿站的权限哦！");
             return;
         }
         guiManager.open(player, station);

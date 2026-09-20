@@ -142,7 +142,7 @@ public class GuiManager {
         } else if (fee > 0) {
             inventory.setItem(slotFee(gui), button(Material.GOLD_NUGGET, "&e快递费槽",
                     "&7本线路需要 &f" + fee + " &7" + config.getCurrencyName(),
-                    "&7把带 &f" + config.getCurrencyKey() + " &7键的物品放入此格"));
+                    "&7把快递费放入此格"));
         }
         inventory.setItem(slotRoute(gui), button(Material.COMPASS, "&b切换目的地",
                 "&7当前目的地: &f" + route.getToStation(),
