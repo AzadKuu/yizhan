@@ -144,11 +144,12 @@ public class GuiManager {
                     "&7本线路需要 &f" + fee + " &7" + config.getCurrencyName(),
                     "&7把快递费放入此格"));
         }
+        String toTitle = resolveStationTitle(route.getToStation());
         inventory.setItem(slotRoute(gui), button(Material.COMPASS, "&b切换目的地",
-                "&7当前目的地: &f" + route.getToStation(),
+                "&7当前目的地: &f" + toTitle,
                 "&7点击切换到下一个路由"));
         inventory.setItem(slotAction(gui), button(Material.MINECART, "&a点击发货",
-                "&7目的地: &f" + route.getToStation(),
+                "&7目的地: &f" + toTitle,
                 "&7缓冲时间: &f" + formatSeconds(buffer),
                 fee > 0 ? "&7快递费: &f" + fee + " &7" + config.getCurrencyName() : "&7快递费: &f无",
                 "&7放入发货区的物品将进入在途状态"));
@@ -160,6 +161,17 @@ public class GuiManager {
                 fee > 0 ? "&7快递费槽: &f底部左起第 2 格 &7(需 &f" + fee + " " + config.getCurrencyName() + "&7)" : "&7本线路免快递费",
                 "&7默认缓冲: &f" + formatSeconds(config.getDefaultBufferSeconds())));
         inventory.setItem(slotClose(gui), button(Material.OAK_DOOR, "&e关闭"));
+    }
+
+    private String resolveStationTitle(String stationId) {
+        if (stationId == null || stationId.isBlank()) {
+            return "";
+        }
+        Station station = storage.getStation(stationId);
+        if (station == null || station.getTitle() == null || station.getTitle().isBlank()) {
+            return stationId;
+        }
+        return station.getTitle();
     }
 
     private void renderReceive(StationHolder holder) {

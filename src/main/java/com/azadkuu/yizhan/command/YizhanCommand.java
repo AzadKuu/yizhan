@@ -39,7 +39,7 @@ import java.util.UUID;
 public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUB_COMMANDS = Arrays.asList(
-            "bind", "unbind", "route", "fee", "buffer", "open", "list", "info", "mail", "mailbox", "dailyreward",
+            "bind", "unbind", "setname", "route", "fee", "buffer", "open", "list", "info", "mail", "mailbox", "dailyreward",
             "reload", "debugitem", "debugpdc", "help");
 
     private final YizhanPlugin plugin;
@@ -70,6 +70,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         switch (args[0].toLowerCase(Locale.ROOT)) {
             case "bind" -> bind(sender, args);
             case "unbind" -> unbind(sender, args);
+            case "setname" -> setname(sender, args);
             case "route" -> route(sender, args);
             case "fee" -> fee(sender, args);
             case "buffer" -> buffer(sender, args);
@@ -99,7 +100,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 3) {
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz bind <名称> <send|receive|both>");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz bind <名称> <send|receive|both> [昵称]");
             return;
         }
         String name = args[1];
@@ -111,6 +112,17 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         if (mode == null) {
             Msg.send(sender, config.getPrefix(), "&c模式只能是 send、receive 或 both");
             return;
+        }
+        String title = name;
+        if (args.length > 3) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 3; i < args.length; i++) {
+                if (i > 3) {
+                    sb.append(' ');
+                }
+                sb.append(args[i]);
+            }
+            title = sb.toString();
         }
         if (storage.getStation(name) != null) {
             Msg.send(sender, config.getPrefix(), "&c驿站 &f" + name + " &c早就有了，换个名字吧！");
@@ -134,12 +146,40 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         station.setY(block.getY());
         station.setZ(block.getZ());
         station.setMode(mode);
-        station.setTitle(name);
+        station.setTitle(title);
         station.setSize(config.getDefaultStationSize());
         station.setBufferSeconds(null);
         storage.saveStation(station);
         Msg.send(sender, config.getPrefix(), "&a驿站 &f" + name + " &a绑定成功！模式 &f" + mode.name().toLowerCase(Locale.ROOT)
                 + " &a位置 &f" + block.getWorld().getName() + " " + block.getX() + "," + block.getY() + "," + block.getZ());
+    }
+
+    private void setname(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("yizhan.bind")) {
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
+            return;
+        }
+        if (args.length < 3) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz setname <驿站ID> <昵称>");
+            return;
+        }
+        String stationId = args[1];
+        Station station = storage.getStation(stationId);
+        if (station == null) {
+            Msg.send(sender, config.getPrefix(), "&c驿站 &f" + stationId + " &c不存在");
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 2; i < args.length; i++) {
+            if (i > 2) {
+                sb.append(' ');
+            }
+            sb.append(args[i]);
+        }
+        String newTitle = sb.toString();
+        station.setTitle(newTitle);
+        storage.saveStation(station);
+        Msg.send(sender, config.getPrefix(), "&a驿站 &f" + stationId + " &a的昵称已设为 &r" + newTitle);
     }
 
     private void unbind(CommandSender sender, String[] args) {
@@ -705,7 +745,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         List<Station> stations = storage.listStations();
         Msg.send(sender, config.getPrefix(), "&7共有 &f" + stations.size() + " &7个驿站");
         for (Station station : stations) {
-            Msg.send(sender, config.getPrefix(), "&f" + station.getId() + " &7[" + station.getMode().name().toLowerCase(Locale.ROOT)
+            String display = station.getId().equals(station.getTitle()) ? station.getId() : station.getId() + " &7(" + station.getTitle() + "&7)";
+            Msg.send(sender, config.getPrefix(), "&f" + display + " &7[" + station.getMode().name().toLowerCase(Locale.ROOT)
                     + "] &7" + station.getServerId() + " " + station.getWorld() + " "
                     + station.getX() + "," + station.getY() + "," + station.getZ());
         }
@@ -722,7 +763,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             return;
         }
         int routes = storage.listRoutesFrom(station.getId()).size();
-        Msg.send(sender, config.getPrefix(), "&6驿站 &f" + station.getId());
+        Msg.send(sender, config.getPrefix(), "&6驿站 &f" + station.getId() + " &7昵称: &r" + station.getTitle());
         Msg.send(sender, config.getPrefix(), "&7类型: &f" + station.getMode().name().toLowerCase(Locale.ROOT)
                 + " &7位置: &f" + station.getServerId() + " " + station.getWorld() + " "
                 + station.getX() + "," + station.getY() + "," + station.getZ());
@@ -931,8 +972,9 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private void help(CommandSender sender) {
         Msg.send(sender, config.getPrefix(), "&6驿站系统命令");
-        Msg.send(sender, config.getPrefix(), "&f/yz bind <名称> <send|receive|both> &7绑定准星方块");
+        Msg.send(sender, config.getPrefix(), "&f/yz bind <名称> <send|receive|both> [昵称] &7绑定准星方块，昵称支持中文和颜色码");
         Msg.send(sender, config.getPrefix(), "&f/yz unbind <名称> &7解绑驿站");
+        Msg.send(sender, config.getPrefix(), "&f/yz setname <驿站ID> <昵称> &7修改驿站昵称（支持中文和颜色码）");
         Msg.send(sender, config.getPrefix(), "&f/yz route <起点> <终点> [秒] [快递费] &7建立单向路由");
         Msg.send(sender, config.getPrefix(), "&f/yz route remove <起点> <终点> &7删除路由");
         Msg.send(sender, config.getPrefix(), "&f/yz fee <起点> <终点> <数量> &7设置路由快递费");

@@ -2,6 +2,7 @@ package com.azadkuu.yizhan.service;
 
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.model.Notification;
+import com.azadkuu.yizhan.model.Station;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.util.Msg;
 import com.azadkuu.yizhan.util.TimeUtil;
@@ -60,27 +61,38 @@ public class NotificationService {
     public String shipStart(long id, String to, int bufferSeconds) {
         return config.getShipStartMessage()
                 .replace("%id%", Long.toString(id))
-                .replace("%to%", to == null ? "" : to)
+                .replace("%to%", resolveStationTitle(to))
                 .replace("%buffer%", TimeUtil.formatSeconds(bufferSeconds));
     }
 
     public String shipArrived(long id, String station) {
         return config.getShipArrivedMessage()
                 .replace("%id%", Long.toString(id))
-                .replace("%station%", station == null ? "" : station);
+                .replace("%station%", resolveStationTitle(station));
     }
 
     public String shipWaiting(long id, String station) {
         return config.getShipWaitingMessage()
                 .replace("%id%", Long.toString(id))
-                .replace("%station%", station == null ? "" : station);
+                .replace("%station%", resolveStationTitle(station));
     }
 
     public String shipDiscarded(long id, String station) {
         int hours = Math.max(1, config.getShipmentDiscardAfterHours());
         return config.getShipDiscardedMessage()
                 .replace("%id%", Long.toString(id))
-                .replace("%station%", station == null ? "" : station)
+                .replace("%station%", resolveStationTitle(station))
                 .replace("%hours%", Integer.toString(hours));
+    }
+
+    private String resolveStationTitle(String stationId) {
+        if (stationId == null || stationId.isBlank()) {
+            return "";
+        }
+        Station station = storage.getStation(stationId);
+        if (station == null || station.getTitle() == null || station.getTitle().isBlank()) {
+            return stationId;
+        }
+        return station.getTitle();
     }
 }

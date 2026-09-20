@@ -397,7 +397,12 @@ public class InventoryListener implements Listener {
         guiManager.render(holder);
         player.updateInventory();
         Route route = holder.getRoutes().get(Math.floorMod(holder.getSelectedRoute(), holder.getRoutes().size()));
-        Msg.send(player, config.getPrefix(), config.getRouteSwitchedMessage().replace("%station%", route.getToStation()));
+        String toTitle = route.getToStation();
+        Station toStation = storage.getStation(route.getToStation());
+        if (toStation != null && toStation.getTitle() != null && !toStation.getTitle().isBlank()) {
+            toTitle = toStation.getTitle();
+        }
+        Msg.send(player, config.getPrefix(), config.getRouteSwitchedMessage().replace("%station%", toTitle));
     }
 
     private void switchView(Player player, StationHolder holder) {
