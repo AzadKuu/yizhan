@@ -42,6 +42,12 @@ public interface Storage extends AutoCloseable {
 
     void deleteRoute(String from, String to);
 
+    /** 与本驿站相关的路由条数（作为起点或终点）。 */
+    int countRoutesAt(String stationId);
+
+    /** 删除与本驿站相关的全部路由（作为起点或终点），返回删除条数。 */
+    int deleteRoutesAt(String stationId);
+
     long createShipment(Route route, UUID owner, Instant departAt, Instant arriveAt, Map<Integer, ItemStack> items);
 
     List<Shipment> listDueShipments(int limit);

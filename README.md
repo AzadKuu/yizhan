@@ -94,7 +94,7 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | 命令 | 说明 |
 |---|---|
 | `/yizhan bind <名称> <send\|receive\|both> [昵称]` | 把准星指向的方块（6 格内）绑定为驿站；可选昵称支持中文和 `&` 颜色码，不填则昵称=名称 |
-| `/yizhan unbind <名称>` | 解绑驿站，并清空其收件箱 |
+| `/yizhan unbind <名称> [--force]` | 删除驿站（需 `yizhan.admin`）。站内还有货物、关联路由或在途快件时会拒绝并列出数量；确认要一起清掉时加 `--force` |
 | `/yizhan setname <驿站ID> <昵称>` | 修改驿站昵称（支持中文和 `&` 颜色码），各类提示消息和 GUI 显示都用昵称 |
 | `/yizhan route <起点> <终点> [缓冲秒] [快递费]` | 建立或更新单向路由，省略秒数则用默认缓冲 |
 | `/yizhan route remove <起点> <终点>` | 删除路由 |
@@ -103,7 +103,7 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | `/yizhan open <名称>` | 远程打开驿站容器 |
 | `/yizhan list` | 列出所有驿站 |
 | `/yizhan info <名称>` | 查看驿站详情 |
-| `/yizhan mailbox <bind\|unbind\|info> [玩家]` | 绑定/解绑/查看自己的邮箱方块（需 `yizhan.mail`）；带 `[玩家]` 表示替该玩家操作（需 `yizhan.admin`） |
+| `/yizhan mailbox <bind\|unbind\|info> [玩家]` | 绑定/解绑/查看自己的邮箱方块（解绑后方块恢复成普通方块，可正常挖掉）（需 `yizhan.mail`）；带 `[玩家]` 表示替该玩家操作（需 `yizhan.admin`） |
 | `/yizhan mailbox public <bind\|unbind\|info>` | 把准星方块设为本服公共邮箱方块：所有玩家右键它都能打开自己的邮箱，每台子服各设一个（需 `yizhan.admin`） |
 | `/yizhan mail send <玩家> [数量]` | 把主手物品发到目标玩家邮箱，省略数量则发整组 |
 | `/yizhan mail give <玩家> <物品ID\|代号> <数量> [消息]` | 发送指定物品到目标玩家邮箱；`<物品ID>` 可填原版材质名或 `/yz item add` 登记的代号；可选 `[消息]` 自定义通知内容（支持 `&` 颜色码和 `%amount%` `%item%` 占位符），不填则用 `messages.mail-received` |

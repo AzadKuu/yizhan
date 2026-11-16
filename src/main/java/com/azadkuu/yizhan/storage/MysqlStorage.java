@@ -479,6 +479,32 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
+    public int countRoutesAt(String stationId) {
+        String sql = "SELECT COUNT(*) FROM " + prefix + "routes WHERE from_station=? OR to_station=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, stationId);
+            ps.setString(2, stationId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("countRoutesAt failed", ex);
+        }
+    }
+
+    @Override
+    public int deleteRoutesAt(String stationId) {
+        String sql = "DELETE FROM " + prefix + "routes WHERE from_station=? OR to_station=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, stationId);
+            ps.setString(2, stationId);
+            return ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new StorageException("deleteRoutesAt failed", ex);
+        }
+    }
+
+    @Override
     public void deleteRoute(String from, String to) {
         try (Connection c = conn(); PreparedStatement ps = c.prepareStatement("DELETE FROM " + prefix + "routes WHERE from_station=? AND to_station=?")) {
             ps.setString(1, from);

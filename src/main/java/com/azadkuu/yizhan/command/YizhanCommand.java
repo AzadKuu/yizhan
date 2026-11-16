@@ -5,6 +5,7 @@ import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.gui.GuiManager;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Route;
+import com.azadkuu.yizhan.model.Shipment;
 import com.azadkuu.yizhan.model.Station;
 import com.azadkuu.yizhan.model.StationMode;
 import com.azadkuu.yizhan.service.ItemFilter;
@@ -183,21 +184,54 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
     }
 
     private void unbind(CommandSender sender, String[] args) {
-        if (!sender.hasPermission("yizhan.bind")) {
+        if (!sender.hasPermission("yizhan.admin")) {
             Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
             return;
         }
         if (args.length < 2) {
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz unbind <名称>");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz unbind <驿站ID> [--force]");
             return;
         }
-        Station station = storage.getStation(args[1]);
+        String stationId = args[1];
+        boolean force = args.length >= 3 && args[2].equalsIgnoreCase("--force");
+        Station station = storage.getStation(stationId);
         if (station == null) {
-            Msg.send(sender, config.getPrefix(), "&c驿站 &f" + args[1] + " &c不存在");
+            Msg.send(sender, config.getPrefix(), "&c驿站 &f" + stationId + " &c不存在");
             return;
         }
-        storage.deleteStation(args[1]);
-        Msg.send(sender, config.getPrefix(), "&a已解绑驿站 &f" + args[1]);
+        int stacks = storage.countStationStacks(stationId);
+        int routes = storage.countRoutesAt(stationId);
+        List<Shipment> inTransitTo = storage.listInTransitTo(stationId);
+        List<Shipment> inTransitFrom = storage.listInTransitFrom(stationId);
+        if (!force && (stacks > 0 || routes > 0 || !inTransitTo.isEmpty() || !inTransitFrom.isEmpty())) {
+            Msg.send(sender, config.getPrefix(), "&c没删：&f" + stationId + " &c还有 &f" + stacks + " &c堆货物、&f"
+                    + routes + " &c条路由、&f" + (inTransitTo.size() + inTransitFrom.size()) + " &c个在途快件");
+            Msg.send(sender, config.getPrefix(),
+                    "&7确认要把这些一起清掉，再执行 &f/yz unbind " + stationId + " --force");
+            return;
+        }
+        int discarded = 0;
+        for (Shipment shipment : inTransitTo) {
+            if (storage.discardShipment(shipment.getId())) {
+                discarded++;
+            }
+        }
+        for (Shipment shipment : inTransitFrom) {
+            if (storage.discardShipment(shipment.getId())) {
+                discarded++;
+            }
+        }
+        int routesDeleted = 0;
+        if (force) {
+            routesDeleted = storage.deleteRoutesAt(stationId);
+        }
+        storage.deleteStation(stationId);
+        if (force) {
+            Msg.send(sender, config.getPrefix(), "&a已强制删除驿站 &f" + stationId + " &7（清掉 &f" + stacks
+                    + " &7堆货物、&f" + routesDeleted + " &7条路由、&f" + discarded + " &7个在途快件）");
+        } else {
+            Msg.send(sender, config.getPrefix(), "&a已删除驿站 &f" + stationId);
+        }
     }
 
     private void route(CommandSender sender, String[] args) {
@@ -366,9 +400,9 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "unbind" -> {
                 if (storage.deletePlayerMailboxBlock(target, config.getServerId())) {
                     if (self) {
-                        Msg.send(sender, config.getPrefix(), "&a邮箱方块已经解绑啦！");
+                        Msg.send(sender, config.getPrefix(), "&a邮箱方块已经解绑啦！&7（方块现在可以正常挖掉了）");
                     } else {
-                        Msg.send(sender, config.getPrefix(), "&a已解除 &f" + targetName + " &a的邮箱方块绑定");
+                        Msg.send(sender, config.getPrefix(), "&a已解除 &f" + targetName + " &a的邮箱方块绑定&7（方块现在可以正常挖掉了）");
                     }
                 } else {
                     Msg.send(sender, config.getPrefix(), self ? "&7你尚未绑定邮箱方块" : "&7" + targetName + " 尚未绑定邮箱方块");
@@ -415,7 +449,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             }
             case "unbind" -> {
                 if (storage.deletePublicMailboxBlock(config.getServerId())) {
-                    Msg.send(player, config.getPrefix(), "&a本服公共邮箱方块已解除");
+                    Msg.send(player, config.getPrefix(), "&a本服公共邮箱方块已解除&7（方块现在可以正常挖掉了）");
                 } else {
                     Msg.send(player, config.getPrefix(), "&7本服还没有设置公共邮箱方块");
                 }
@@ -1063,7 +1097,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
     private void help(CommandSender sender) {
         Msg.send(sender, config.getPrefix(), "&6驿站系统命令");
         Msg.send(sender, config.getPrefix(), "&f/yz bind <名称> <send|receive|both> [昵称] &7绑定准星方块，昵称支持中文和颜色码");
-        Msg.send(sender, config.getPrefix(), "&f/yz unbind <名称> &7解绑驿站");
+        Msg.send(sender, config.getPrefix(), "&f/yz unbind <名称> [--force] &7删除驿站（有货/路由/在途单时需 --force，需 yizhan.admin）");
         Msg.send(sender, config.getPrefix(), "&f/yz setname <驿站ID> <昵称> &7修改驿站昵称（支持中文和颜色码）");
         Msg.send(sender, config.getPrefix(), "&f/yz route <起点> <终点> [秒] [快递费] &7建立单向路由");
         Msg.send(sender, config.getPrefix(), "&f/yz route remove <起点> <终点> &7删除路由");
@@ -1176,6 +1210,9 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         if (args.length == 3) {
             if (sub.equals("bind")) {
                 return filtered(Arrays.asList("send", "receive", "both"), args[2]);
+            }
+            if (sub.equals("unbind")) {
+                return filtered(List.of("--force"), args[2]);
             }
             if (sub.equals("route")) {
                 return stationNames(args[2]);
