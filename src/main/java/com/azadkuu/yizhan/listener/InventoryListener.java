@@ -191,6 +191,8 @@ public class InventoryListener implements Listener {
                 claimAllMailbox(player, mailbox);
             } else if (raw == GuiManager.mailSlotReclaim(items)) {
                 reclaimMailbox(player, mailbox);
+            } else if (raw == GuiManager.mailSlotContacts(items)) {
+                guiManager.openContacts(player, 0);
             }
         }
     }
