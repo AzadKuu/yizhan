@@ -110,6 +110,9 @@ public interface Storage extends AutoCloseable {
 
     boolean deletePublicMailboxBlock(String serverId);
 
+    /** 本服全部邮箱方块坐标键（world:x:y:z，含个人绑定与公共邮箱），供快速判定用。 */
+    java.util.Set<String> listMailboxKeys(String serverId);
+
     boolean addMailContact(UUID owner, UUID contact, String contactName, String serverId);
 
     List<MailContact> listMailContacts(UUID owner, String serverId);

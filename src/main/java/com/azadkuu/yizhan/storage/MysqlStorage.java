@@ -1615,6 +1615,28 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
+    public java.util.Set<String> listMailboxKeys(String serverId) {
+        String sql = "SELECT CONCAT(world,':',x,':',y,':',z) FROM " + prefix + "player_mailbox_blocks WHERE server_id=? "
+                + "UNION SELECT CONCAT(world,':',x,':',y,':',z) FROM " + prefix + "mailbox_blocks WHERE server_id=?";
+        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, serverId);
+            ps.setString(2, serverId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String key = rs.getString(1);
+                    if (key != null) {
+                        out.add(key);
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("listMailboxKeys failed", ex);
+        }
+        return out;
+    }
+
+    @Override
     public List<UUID> findMailboxOwners(String serverId, String world, int x, int y, int z) {
         String sql = "SELECT player_uuid FROM " + prefix + "player_mailbox_blocks "
                 + "WHERE server_id=? AND world=? AND x=? AND y=? AND z=?";

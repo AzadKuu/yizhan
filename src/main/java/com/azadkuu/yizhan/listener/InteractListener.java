@@ -17,7 +17,9 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public class InteractListener implements Listener {
@@ -25,6 +27,10 @@ public class InteractListener implements Listener {
     private final PluginConfig config;
     private final Storage storage;
     private final GuiManager guiManager;
+    /** 本服邮箱方块坐标键缓存，避免每次挖掘都查库。 */
+    private final Set<String> mailboxKeys = new HashSet<>();
+    private long mailboxKeysAt = 0L;
+    private static final long MAILBOX_KEYS_TTL_MS = 5000L;
 
     public InteractListener(PluginConfig config, Storage storage, GuiManager guiManager) {
         this.config = config;
@@ -40,13 +46,24 @@ public class InteractListener implements Listener {
                 && mailboxBlock.z() == block.getZ();
     }
 
-    /** 这个方块是不是邮箱（个人绑定的或本服公共邮箱）。 */
+    private static String key(Block block) {
+        return block.getWorld().getName() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
+    }
+
+    /** 这个方块是不是邮箱（个人绑定的或本服公共邮箱），走 5 秒缓存，避免每次挖掘都查库。 */
     private boolean isMailbox(Block block) {
-        if (isMailboxBlock(storage.getPublicMailboxBlock(config.getServerId()), block)) {
-            return true;
+        long now = System.currentTimeMillis();
+        if (now - mailboxKeysAt > MAILBOX_KEYS_TTL_MS) {
+            mailboxKeysAt = now;
+            try {
+                mailboxKeys.clear();
+                mailboxKeys.addAll(storage.listMailboxKeys(config.getServerId()));
+            } catch (RuntimeException ex) {
+                mailboxKeysAt = 0L;
+                return false;
+            }
         }
-        return !storage.findMailboxOwners(config.getServerId(), block.getWorld().getName(),
-                block.getX(), block.getY(), block.getZ()).isEmpty();
+        return mailboxKeys.contains(key(block));
     }
 
     /** 邮箱方块不允许被挖掘（OP 例外，方便运维）。 */
