@@ -17,9 +17,9 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 
 public class InteractListener implements Listener {
@@ -27,10 +27,10 @@ public class InteractListener implements Listener {
     private final PluginConfig config;
     private final Storage storage;
     private final GuiManager guiManager;
-    /** 本服邮箱方块坐标键缓存，避免每次挖掘都查库。 */
-    private final Set<String> mailboxKeys = new HashSet<>();
-    private long mailboxKeysAt = 0L;
-    private static final long MAILBOX_KEYS_TTL_MS = 5000L;
+    /** 本服受保护方块坐标键 -> 名称（邮箱 / 驿站），避免每次挖掘都查库。 */
+    private final Map<String, String> protectedKeys = new HashMap<>();
+    private long protectedKeysAt = 0L;
+    private static final long PROTECTED_KEYS_TTL_MS = 5000L;
 
     public InteractListener(PluginConfig config, Storage storage, GuiManager guiManager) {
         this.config = config;
@@ -50,36 +50,51 @@ public class InteractListener implements Listener {
         return block.getWorld().getName() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
     }
 
-    /** 这个方块是不是邮箱（个人绑定的或本服公共邮箱），走 5 秒缓存，避免每次挖掘都查库。 */
-    private boolean isMailbox(Block block) {
+    /** 刷新受保护方块坐标（本服邮箱 + 本服驿站），5 秒缓存，避免每次挖掘都查库。 */
+    private void refreshProtectedKeys() {
         long now = System.currentTimeMillis();
-        if (now - mailboxKeysAt > MAILBOX_KEYS_TTL_MS) {
-            mailboxKeysAt = now;
-            try {
-                mailboxKeys.clear();
-                mailboxKeys.addAll(storage.listMailboxKeys(config.getServerId()));
-            } catch (RuntimeException ex) {
-                mailboxKeysAt = 0L;
-                return false;
-            }
+        if (now - protectedKeysAt <= PROTECTED_KEYS_TTL_MS) {
+            return;
         }
-        return mailboxKeys.contains(key(block));
+        protectedKeysAt = now;
+        try {
+            Map<String, String> fresh = new HashMap<>();
+            for (String mailboxKey : storage.listMailboxKeys(config.getServerId())) {
+                fresh.put(mailboxKey, "邮箱方块");
+            }
+            for (Station station : storage.listStations()) {
+                if (!config.getServerId().equals(station.getServerId())) {
+                    continue;
+                }
+                fresh.put(station.getWorld() + ":" + station.getX() + ":" + station.getY() + ":" + station.getZ(), "驿站方块");
+            }
+            protectedKeys.clear();
+            protectedKeys.putAll(fresh);
+        } catch (RuntimeException ex) {
+            protectedKeysAt = 0L;
+        }
     }
 
-    /** 邮箱方块不允许被挖掘（OP 例外，方便运维）。 */
+    /** 邮箱 / 驿站方块不允许被挖掘（OP 例外，方便运维）。 */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
         Player player = event.getPlayer();
-        if (player.isOp()) {
+        if (player.isOp() || player.hasPermission("yizhan.admin")) {
             return;
         }
         Block block = event.getBlock();
-        if (!isMailbox(block)) {
+        refreshProtectedKeys();
+        String label = protectedKeys.get(key(block));
+        if (label == null) {
             return;
         }
         event.setCancelled(true);
-        Msg.send(player, config.getPrefix(),
-                "&c这是邮箱方块，不能挖哦！&7（自己的邮箱可以用 &f/yz mailbox unbind &7解绑）");
+        if ("邮箱方块".equals(label)) {
+            Msg.send(player, config.getPrefix(),
+                    "&c这是邮箱方块，不能挖哦！&7（自己的邮箱可以用 &f/yz mailbox unbind &7解绑）");
+        } else {
+            Msg.send(player, config.getPrefix(), "&c这是驿站方块，不能挖哦！&7找管理员处理吧");
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
