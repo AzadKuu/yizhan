@@ -6,6 +6,7 @@ import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Station;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.util.Msg;
+import org.bukkit.Bukkit;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -13,6 +14,10 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 public class InteractListener implements Listener {
 
@@ -54,6 +59,41 @@ public class InteractListener implements Listener {
             guiManager.openMailbox(player);
             return;
         }
+        List<UUID> mailboxOwners = storage.findMailboxOwners(config.getServerId(), block.getWorld().getName(),
+                block.getX(), block.getY(), block.getZ());
+        if (!mailboxOwners.isEmpty()) {
+            event.setCancelled(true);
+            if (!player.hasPermission("yizhan.mail")) {
+                Msg.send(player, config.getPrefix(), "&c你没有使用邮箱的权限哦！");
+                return;
+            }
+            List<String> added = new ArrayList<>();
+            List<String> known = new ArrayList<>();
+            for (UUID owner : mailboxOwners) {
+                if (owner.equals(player.getUniqueId())) {
+                    continue;
+                }
+                String name = Bukkit.getOfflinePlayer(owner).getName();
+                if (name == null || name.isBlank()) {
+                    name = owner.toString().substring(0, 8);
+                }
+                if (storage.addMailContact(player.getUniqueId(), owner, name, config.getServerId())) {
+                    added.add(name);
+                } else {
+                    known.add(name);
+                }
+            }
+            if (!added.isEmpty()) {
+                Msg.send(player, config.getPrefix(),
+                        "&a已把 &f" + String.join("、", added) + " &a的邮箱地址加入通讯录（本服）");
+            }
+            if (!known.isEmpty()) {
+                Msg.send(player, config.getPrefix(),
+                        "&7" + String.join("、", known) + " 已经在你的通讯录里了");
+            }
+            return;
+        }
+
         Station station = storage.getStationAt(config.getServerId(), block.getWorld().getName(),
                 block.getX(), block.getY(), block.getZ());
         if (station == null) {

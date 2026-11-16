@@ -1,6 +1,7 @@
 package com.azadkuu.yizhan.storage;
 
 import com.azadkuu.yizhan.model.DeliveryResult;
+import com.azadkuu.yizhan.model.MailContact;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Notification;
 import com.azadkuu.yizhan.model.Route;
@@ -108,6 +109,12 @@ public interface Storage extends AutoCloseable {
     void savePublicMailboxBlock(String serverId, String world, int x, int y, int z);
 
     boolean deletePublicMailboxBlock(String serverId);
+
+    boolean addMailContact(UUID owner, UUID contact, String contactName, String serverId);
+
+    List<MailContact> listMailContacts(UUID owner, String serverId);
+
+    List<UUID> findMailboxOwners(String serverId, String world, int x, int y, int z);
 
     void saveItemTemplate(String code, ItemStack item);
 

@@ -2,6 +2,7 @@ package com.azadkuu.yizhan.storage;
 
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.model.DeliveryResult;
+import com.azadkuu.yizhan.model.MailContact;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Notification;
 import com.azadkuu.yizhan.model.Route;
@@ -198,6 +199,15 @@ public class MysqlStorage implements Storage {
                         + "x INT NOT NULL, y INT NOT NULL, z INT NOT NULL,"
                         + "created_at BIGINT NOT NULL,"
                         + "PRIMARY KEY (player_uuid, server_id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "mail_contacts ("
+                        + "owner_uuid VARCHAR(36) NOT NULL,"
+                        + "contact_uuid VARCHAR(36) NOT NULL,"
+                        + "contact_name VARCHAR(64) NOT NULL,"
+                        + "server_id VARCHAR(64) NOT NULL,"
+                        + "added_at BIGINT NOT NULL,"
+                        + "PRIMARY KEY (owner_uuid, contact_uuid, server_id)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 
                 "CREATE TABLE IF NOT EXISTS " + prefix + "item_templates ("
@@ -1563,6 +1573,73 @@ public class MysqlStorage implements Storage {
             throw new StorageException("deletePublicMailboxBlock failed", ex);
         }
     }
+    @Override
+    public boolean addMailContact(UUID owner, UUID contact, String contactName, String serverId) {
+        String sql = "INSERT IGNORE INTO " + prefix + "mail_contacts (owner_uuid, contact_uuid, contact_name, server_id, added_at) "
+                + "VALUES (?,?,?,?,?)";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, owner.toString());
+            ps.setString(2, contact.toString());
+            ps.setString(3, contactName);
+            ps.setString(4, serverId);
+            ps.setLong(5, System.currentTimeMillis());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            throw new StorageException("addMailContact failed", ex);
+        }
+    }
+
+    @Override
+    public List<MailContact> listMailContacts(UUID owner, String serverId) {
+        String sql = "SELECT contact_uuid, contact_name FROM " + prefix + "mail_contacts "
+                + "WHERE owner_uuid=? AND server_id=? ORDER BY added_at, contact_name";
+        List<MailContact> out = new ArrayList<>();
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, owner.toString());
+            ps.setString(2, serverId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    UUID contact;
+                    try {
+                        contact = UUID.fromString(rs.getString(1));
+                    } catch (IllegalArgumentException ex) {
+                        continue;
+                    }
+                    out.add(new MailContact(contact, rs.getString(2)));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("listMailContacts failed", ex);
+        }
+        return out;
+    }
+
+    @Override
+    public List<UUID> findMailboxOwners(String serverId, String world, int x, int y, int z) {
+        String sql = "SELECT player_uuid FROM " + prefix + "player_mailbox_blocks "
+                + "WHERE server_id=? AND world=? AND x=? AND y=? AND z=?";
+        List<UUID> out = new ArrayList<>();
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, serverId);
+            ps.setString(2, world);
+            ps.setInt(3, x);
+            ps.setInt(4, y);
+            ps.setInt(5, z);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    try {
+                        out.add(UUID.fromString(rs.getString(1)));
+                    } catch (IllegalArgumentException ignored) {
+                        // 跳过脏数据
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("findMailboxOwners failed", ex);
+        }
+        return out;
+    }
+
     @Override
     public void saveItemTemplate(String code, ItemStack item) {
         byte[] data = ItemSerializer.serialize(item);

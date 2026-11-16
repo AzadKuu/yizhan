@@ -1,6 +1,7 @@
 package com.azadkuu.yizhan.gui;
 
 import com.azadkuu.yizhan.config.PluginConfig;
+import com.azadkuu.yizhan.model.MailContact;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Shipment;
@@ -19,6 +20,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.SkullMeta;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -261,6 +263,9 @@ public class GuiManager {
         inventory.setItem(mailSlotInfo(items), button(Material.PAPER, "&f我的邮箱",
                 "&7已用槽位: &f" + used + "/" + items,
                 "&7这是你自己的邮箱，别人看不到"));
+        inventory.setItem(mailSlotContacts(items), button(Material.WRITABLE_BOOK, "&b发送邮件",
+                "&7打开通讯录，给其中的人寄物品",
+                "&7右键别人的邮箱方块即可把他加入通讯录"));
         int pending = holder.getPendingCount();
         if (pending > 0) {
             inventory.setItem(mailSlotReclaim(items), button(Material.ENDER_CHEST, "&6重新领取邮件",
@@ -288,6 +293,26 @@ public class GuiManager {
     public static int mailSlotInfo(int items) {
         return items + 8;
     }
+
+    public static int mailSlotContacts(int items) {
+        return items + 2;
+    }
+
+    public static final int CONTACT_LIST_SIZE = 45;
+
+    public static int contactSlotPrev() {
+        return 45;
+    }
+
+    public static int contactSlotClose() {
+        return 49;
+    }
+
+    public static int contactSlotNext() {
+        return 53;
+    }
+
+    public static final int MAIL_SEND_INPUT = 36;
 
     public static final int DISCARDED_SLOT_CLOSE = 49;
     public static final int DISCARDED_SLOT_INFO = 53;
@@ -328,6 +353,88 @@ public class GuiManager {
                 "&7当前显示: &f" + count + " &7件",
                 "&7点击物品取出到背包",
                 "&7超过 45 件仅显示前 45 件"));
+    }
+
+    public void openContacts(Player player, int page) {
+        List<MailContact> contacts = storage.listMailContacts(player.getUniqueId(), config.getServerId());
+        int pages = Math.max(1, (contacts.size() + CONTACT_LIST_SIZE - 1) / CONTACT_LIST_SIZE);
+        int current = Math.max(0, Math.min(page, pages - 1));
+        ContactsHolder holder = new ContactsHolder(player.getUniqueId(), current, contacts);
+        Inventory inventory = Bukkit.createInventory(holder, 54,
+                Msg.component("&8通讯录 &7· &6" + (current + 1) + "/" + pages));
+        holder.setInventory(inventory);
+        renderContacts(holder);
+        player.openInventory(inventory);
+    }
+
+    public void renderContacts(ContactsHolder holder) {
+        Inventory inventory = holder.getInventory();
+        inventory.clear();
+        int pages = Math.max(1, (holder.getContacts().size() + CONTACT_LIST_SIZE - 1) / CONTACT_LIST_SIZE);
+        int from = holder.getPage() * CONTACT_LIST_SIZE;
+        for (int i = 0; i < CONTACT_LIST_SIZE; i++) {
+            int index = from + i;
+            if (index >= holder.getContacts().size()) {
+                break;
+            }
+            MailContact contact = holder.getContacts().get(index);
+            inventory.setItem(i, head(contact.uuid(), "&f" + contact.name(),
+                    "&7邮箱地址: &f" + contact.name() + "@" + config.getServerId(),
+                    "&7点击寄物品给 TA"));
+        }
+        if (holder.getContacts().isEmpty()) {
+            inventory.setItem(22, button(Material.PLAYER_HEAD, "&7通讯录还是空的",
+                    "&7右键别人的邮箱方块",
+                    "&7就能把他的邮箱地址加进来"));
+        }
+        if (holder.getPage() > 0) {
+            inventory.setItem(contactSlotPrev(), button(Material.ARROW, "&e上一页"));
+        }
+        inventory.setItem(contactSlotClose(), button(Material.BARRIER, "&c关闭",
+                "&7共 &f" + holder.getContacts().size() + " &7位联系人"));
+        if (holder.getPage() < pages - 1) {
+            inventory.setItem(contactSlotNext(), button(Material.ARROW, "&e下一页"));
+        }
+    }
+
+    public void openSendTo(Player player, UUID target, String targetName) {
+        MailSendHolder holder = new MailSendHolder(target, targetName, MAIL_SEND_INPUT);
+        Inventory inventory = Bukkit.createInventory(holder, 54,
+                Msg.component("&8寄给 &6" + targetName));
+        holder.setInventory(inventory);
+        renderSendTo(holder);
+        player.openInventory(inventory);
+    }
+
+    public void renderSendTo(MailSendHolder holder) {
+        Inventory inventory = holder.getInventory();
+        inventory.setItem(45, button(Material.ARROW, "&e返回通讯录",
+                "&7已放入的物品会退回你的背包"));
+        inventory.setItem(49, button(Material.LIME_DYE, "&a确认发送",
+                "&7把上方 36 格内的物品寄给 &f" + holder.getTargetName(),
+                "&7邮件会进入对方的邮箱"));
+        inventory.setItem(53, button(Material.BARRIER, "&c关闭",
+                "&7已放入的物品会退回你的背包"));
+    }
+
+    private ItemStack head(UUID uuid, String name, String... lore) {
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            if (meta instanceof SkullMeta skull) {
+                skull.setOwningPlayer(Bukkit.getOfflinePlayer(uuid));
+            }
+            meta.displayName(Msg.component(name));
+            if (lore.length > 0) {
+                List<Component> lines = new ArrayList<>();
+                for (String line : lore) {
+                    lines.add(Msg.component(line));
+                }
+                meta.lore(lines);
+            }
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     private ItemStack button(Material material, String name, String... lore) {

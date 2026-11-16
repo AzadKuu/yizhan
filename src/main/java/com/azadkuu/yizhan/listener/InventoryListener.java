@@ -3,8 +3,11 @@ package com.azadkuu.yizhan.listener;
 import com.azadkuu.yizhan.YizhanPlugin;
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.gui.GuiManager;
+import com.azadkuu.yizhan.gui.ContactsHolder;
 import com.azadkuu.yizhan.gui.DiscardedHolder;
+import com.azadkuu.yizhan.gui.MailSendHolder;
 import com.azadkuu.yizhan.gui.MailboxHolder;
+import com.azadkuu.yizhan.model.MailContact;
 import com.azadkuu.yizhan.gui.StationHolder;
 import com.azadkuu.yizhan.model.Route;
 import com.azadkuu.yizhan.model.Station;
@@ -25,7 +28,9 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -63,6 +68,14 @@ public class InventoryListener implements Listener {
         }
         if (top.getHolder() instanceof DiscardedHolder discarded) {
             handleDiscardedClick(event, player, top, discarded);
+            return;
+        }
+        if (top.getHolder() instanceof ContactsHolder contacts) {
+            handleContactsClick(event, player, top, contacts);
+            return;
+        }
+        if (top.getHolder() instanceof MailSendHolder send) {
+            handleMailSendClick(event, player, top, send);
             return;
         }
         if (!(top.getHolder() instanceof StationHolder holder)) {
@@ -223,9 +236,155 @@ public class InventoryListener implements Listener {
         player.updateInventory();
     }
 
+    private void handleContactsClick(InventoryClickEvent event, Player player, Inventory top, ContactsHolder holder) {
+        int raw = event.getRawSlot();
+        if (raw < 0) {
+            return;
+        }
+        if (raw >= top.getSize()) {
+            if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+        event.setCancelled(true);
+        if (raw == GuiManager.contactSlotClose()) {
+            player.closeInventory();
+            return;
+        }
+        if (raw == GuiManager.contactSlotPrev()) {
+            guiManager.openContacts(player, holder.getPage() - 1);
+            return;
+        }
+        if (raw == GuiManager.contactSlotNext()) {
+            guiManager.openContacts(player, holder.getPage() + 1);
+            return;
+        }
+        int index = holder.getPage() * GuiManager.CONTACT_LIST_SIZE + raw;
+        if (index < 0 || index >= holder.getContacts().size()) {
+            return;
+        }
+        MailContact contact = holder.getContacts().get(index);
+        guiManager.openSendTo(player, contact.uuid(), contact.name());
+    }
+
+    private void handleMailSendClick(InventoryClickEvent event, Player player, Inventory top, MailSendHolder holder) {
+        int raw = event.getRawSlot();
+        int guiSize = top.getSize();
+        int inputSlots = holder.getInputSlots();
+        if (raw < 0) {
+            return;
+        }
+        if (raw >= guiSize) {
+            if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+                event.setCancelled(true);
+                ItemStack current = event.getCurrentItem();
+                if (current == null || current.getType().isAir()) {
+                    return;
+                }
+                if (filter.isBlocked(current)) {
+                    sendItemBlocked(player, current, config.getItemBlockedMessage());
+                    return;
+                }
+                ItemStack leftover = moveInto(top, 0, inputSlots, current);
+                event.setCurrentItem(leftover);
+                player.updateInventory();
+            }
+            return;
+        }
+        if (raw < inputSlots) {
+            ItemStack incoming = resolveIncoming(event, guiSize);
+            if (incoming != null && filter.isBlocked(incoming)) {
+                event.setCancelled(true);
+                sendItemBlocked(player, incoming, config.getItemBlockedMessage());
+            }
+            return;
+        }
+        event.setCancelled(true);
+        if (raw == 45) {
+            returnMailSendItems(player, holder);
+            guiManager.openContacts(player, 0);
+        } else if (raw == 49) {
+            confirmMailSend(player, top, holder);
+        } else if (raw == 53) {
+            player.closeInventory();
+        }
+    }
+
+    private void confirmMailSend(Player player, Inventory top, MailSendHolder holder) {
+        int inputSlots = holder.getInputSlots();
+        List<ItemStack> items = new ArrayList<>();
+        for (int i = 0; i < inputSlots; i++) {
+            ItemStack item = top.getItem(i);
+            if (item != null && !item.getType().isAir()) {
+                items.add(item.clone());
+            }
+        }
+        if (items.isEmpty()) {
+            Msg.send(player, config.getPrefix(), "&7邮寄区还是空的，先放点要寄的东西吧");
+            return;
+        }
+        for (int i = 0; i < inputSlots; i++) {
+            top.setItem(i, null);
+        }
+        holder.setConfirmed(true);
+        String itemName = items.get(0).getType().name().toLowerCase(Locale.ROOT).replace('_', ' ');
+        String receive = config.getMailReceivedFromMessage()
+                .replace("%amount%", String.valueOf(items.size()))
+                .replace("%item%", itemName)
+                .replace("%sender%", player.getName());
+        try {
+            plugin.getMailboxService().deliver(holder.getTarget(), items, receive);
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("send mail to " + holder.getTarget() + " failed: " + ex.getMessage());
+            for (ItemStack item : items) {
+                giveOrDrop(player, item);
+            }
+            Msg.send(player, config.getPrefix(), config.getClaimFailedMessage());
+            player.closeInventory();
+            return;
+        }
+        Msg.send(player, config.getPrefix(), config.getMailSentMessage()
+                .replace("%amount%", String.valueOf(items.size()))
+                .replace("%item%", itemName)
+                .replace("%target%", holder.getTargetName()));
+        player.closeInventory();
+    }
+
+    private void returnMailSendItems(Player player, MailSendHolder holder) {
+        if (holder.isConfirmed()) {
+            return;
+        }
+        Inventory top = holder.getInventory();
+        if (top == null) {
+            return;
+        }
+        int inputSlots = holder.getInputSlots();
+        for (int i = 0; i < inputSlots; i++) {
+            ItemStack item = top.getItem(i);
+            if (item != null && !item.getType().isAir()) {
+                top.setItem(i, null);
+                giveOrDrop(player, item);
+            }
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onDrag(InventoryDragEvent event) {
         Inventory top = event.getView().getTopInventory();
+        if (top.getHolder() instanceof ContactsHolder) {
+            event.setCancelled(true);
+            return;
+        }
+        if (top.getHolder() instanceof MailSendHolder send) {
+            for (int slot : event.getRawSlots()) {
+                if (slot >= send.getInputSlots() && slot < top.getSize()) {
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+            return;
+        }
         if (top.getHolder() instanceof MailboxHolder) {
             int items = config.getMailboxSize();
             for (int slot : event.getRawSlots()) {
@@ -294,6 +453,10 @@ public class InventoryListener implements Listener {
         }
         if (top.getHolder() instanceof DiscardedHolder) {
             guiManager.unregisterDiscarded(player.getUniqueId());
+            return;
+        }
+        if (top.getHolder() instanceof MailSendHolder send) {
+            returnMailSendItems(player, send);
             return;
         }
         if (!(top.getHolder() instanceof StationHolder holder)) {
