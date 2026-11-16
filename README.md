@@ -14,7 +14,7 @@ Paper 1.21.x 跨服物资运输插件。把物品从一个服务器的容器，�
 - **收件箱容量保护**：发货前预检「目标收件箱已占 + 在途包裹」是否会超容量，不足直接拦下并提示清理；发出后目标被塞满则一直重试投递并通知发件人，超过 `shipment.discard-after-hours`（默认 24 小时）仍投不进则把物品暂存到丢弃仓库，管理员用 `/yz discarded` 领取，不会丢件
 - **邮箱暂存不丢件**：收件人邮箱满时，放不下的邮件进入待领取队列，清理邮箱后点邮箱界面的「重新领取」即可补入，不会消失
 - **发货与到货通知**：发货、投递完成、目标满等待、超时丢弃都会给相关玩家发消息；玩家不在线时消息入库，下次在任意子服上线自动补发
-- **玩家邮箱**：每个玩家用 `/yizhan mailbox bind` 绑定自己的邮箱方块，右键即可打开独立的邮箱，物品按 UUID 存库，天然跨服
+- **玩家邮箱**：每个玩家用 `/yizhan mailbox bind` 绑定自己的邮箱方块，右键即可打开独立的邮箱，物品按 UUID 存库，天然跨服；管理员可用 `/yizhan mailbox bind <玩家>` 替玩家绑定，或用 `/yizhan mailbox public bind` 在本服设一个**公共邮箱方块**，谁右键它都打开自己的邮箱
 - **跨服发奖**：`/yizhan mail send` / `/yizhan mail give` 可把物品直接投递到任意玩家（含离线、含其他子服）的邮箱；`mail give` 支持自定义通知消息，方便命令方块发奖时附带活动说明
 - **每日奖励**：玩家每天首次登录时，自动把奖励投递到自己的邮箱（原版材质 + 登记模板物品两种来源叠加）
 - **快递费**：路由可配置快递费，发货界面有独立费用槽，放入匹配 `currency-key`（可选 `currency-value`）的货币物品才能发货
@@ -103,7 +103,8 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 | `/yizhan open <名称>` | 远程打开驿站容器 |
 | `/yizhan list` | 列出所有驿站 |
 | `/yizhan info <名称>` | 查看驿站详情 |
-| `/yizhan mailbox <bind\|unbind\|info>` | 绑定/解绑/查看自己的邮箱方块（需 `yizhan.mail`） |
+| `/yizhan mailbox <bind\|unbind\|info> [玩家]` | 绑定/解绑/查看自己的邮箱方块（需 `yizhan.mail`）；带 `[玩家]` 表示替该玩家操作（需 `yizhan.admin`） |
+| `/yizhan mailbox public <bind\|unbind\|info>` | 把准星方块设为本服公共邮箱方块：所有玩家右键它都能打开自己的邮箱，每台子服各设一个（需 `yizhan.admin`） |
 | `/yizhan mail send <玩家> [数量]` | 把主手物品发到目标玩家邮箱，省略数量则发整组 |
 | `/yizhan mail give <玩家> <物品ID\|代号> <数量> [消息]` | 发送指定物品到目标玩家邮箱；`<物品ID>` 可填原版材质名或 `/yz item add` 登记的代号；可选 `[消息]` 自定义通知内容（支持 `&` 颜色码和 `%amount%` `%item%` 占位符），不填则用 `messages.mail-received` |
 | `/yizhan dailyreward add` | 把主手物品登记为每日奖励模板（支持 Nexo 等自定义物品，需 `yizhan.admin`） |
@@ -131,6 +132,13 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 4. 关闭界面时自动保存
 
 投递到邮箱的途径有三种：`/yizhan mail send`、`/yizhan mail give`、每日奖励。
+
+### 管理员代绑 / 公共邮箱方块
+
+- **代绑**：`/yizhan mailbox bind <玩家>` —— 管理员对准方块执行，就把这个方块绑成**该玩家**在该子服的邮箱；`unbind` / `info` 同样支持带玩家名。玩家在线时会收到一条提示。
+- **公共邮箱**：`/yizhan mailbox public bind` —— 管理员对准方块执行，把这个方块设为本服的公共邮箱方块；此后**任何有 `yizhan.mail` 权限的玩家右键它都会打开自己的邮箱**，不用各自绑定。适合放在出生点、驿站旁。`public unbind` / `public info` 用于解除与查看。
+- 公共邮箱每台子服只能设一个（存 `yz_mailbox_blocks` 表，主键 `server_id`），所以要在每台子服分别设置。
+- 代绑按玩家 UUID 写入（与玩家自己绑定完全等价），玩家离线也能操作；找不到该玩家名字时会直接报错。
 
 ## 每日奖励
 
@@ -277,7 +285,8 @@ item-filter:
 | `yz_mailbox_overflow` | 邮箱满时暂存的待领取邮件，按写入顺序（FIFO）补入邮箱 |
 | `yz_discarded_items` | 投递超时丢弃的物品暂存，管理员用 `/yz discarded` 领取 |
 | `yz_item_templates` | 可按代号发放的自定义物品模板，`/yz item add` 登记，`/yz mail give <玩家> <代号> <数量>` 发放 |
-| `yz_player_mailbox_blocks` | 各玩家在各子服的邮箱方块绑定位置 |
+| `yz_player_mailbox_blocks` | 各玩家在各子服的邮箱方块绑定位置（玩家自绑与管理员代绑都写这里） |
+| `yz_mailbox_blocks` | 各子服的**公共邮箱方块**坐标（每服一条，主键 `server_id`） |
 
 物品以 `ItemStack#serializeAsBytes()` 序列化后存 `LONGBLOB`。
 
@@ -334,7 +343,7 @@ UPDATE yz_shipments SET status='DELIVERED' WHERE id=? AND status='IN_TRANSIT'
 - **邮箱暂存需手动补领**：邮箱满时收到的邮件暂存在 `yz_mailbox_overflow`，需要在邮箱界面点「重新领取」补入；不自动补入，避免打开界面时物品突然出现。
 - `allow-cancel-shipment` 与 `max-station-size` 为预留配置，当前版本尚未生效。
 - 驿站方块与邮箱方块会拦截原版右键交互，建议绑定在普通方块（或专用装饰方块）上，避免与原版容器功能混淆。
-- 邮箱方块被破坏后不会自动解绑，需要重新 `/yz mailbox bind` 到新位置。
+- 邮箱方块（含公共邮箱方块）被破坏后不会自动解绑，需要重新 `/yz mailbox bind` 或 `/yz mailbox public bind` 到新位置。
 
 ## 目录结构
 

@@ -26,6 +26,14 @@ public class InteractListener implements Listener {
         this.guiManager = guiManager;
     }
 
+    private boolean isMailboxBlock(MailboxBlock mailboxBlock, Block block) {
+        return mailboxBlock != null
+                && mailboxBlock.world().equals(block.getWorld().getName())
+                && mailboxBlock.x() == block.getX()
+                && mailboxBlock.y() == block.getY()
+                && mailboxBlock.z() == block.getZ();
+    }
+
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
@@ -36,12 +44,8 @@ public class InteractListener implements Listener {
             return;
         }
         Player player = event.getPlayer();
-        MailboxBlock mailboxBlock = storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId());
-        if (mailboxBlock != null
-                && mailboxBlock.world().equals(block.getWorld().getName())
-                && mailboxBlock.x() == block.getX()
-                && mailboxBlock.y() == block.getY()
-                && mailboxBlock.z() == block.getZ()) {
+        if (isMailboxBlock(storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId()), block)
+                || isMailboxBlock(storage.getPublicMailboxBlock(config.getServerId()), block)) {
             event.setCancelled(true);
             if (!player.hasPermission("yizhan.mail")) {
                 Msg.send(player, config.getPrefix(), "&c你没有开邮箱的权限哦！");

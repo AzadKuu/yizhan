@@ -1,7 +1,7 @@
 name: Yizhan
 version: '${project.version}'
 main: com.azadkuu.yizhan.YizhanPlugin
-api-version: '1.21'
+api-version: '1.21.3'
 authors: [AZADKUU]
 description: Cross-server item transport relay for Paper
 commands:

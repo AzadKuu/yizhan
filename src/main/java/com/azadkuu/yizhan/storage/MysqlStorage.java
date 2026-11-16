@@ -1521,6 +1521,49 @@ public class MysqlStorage implements Storage {
     }
 
     @Override
+    public MailboxBlock getPublicMailboxBlock(String serverId) {
+        String sql = "SELECT world, x, y, z FROM " + prefix + "mailbox_blocks WHERE server_id=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, serverId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new MailboxBlock(serverId, rs.getString(1), rs.getInt(2), rs.getInt(3), rs.getInt(4));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("getPublicMailboxBlock failed", ex);
+        }
+        return null;
+    }
+
+    @Override
+    public void savePublicMailboxBlock(String serverId, String world, int x, int y, int z) {
+        String sql = "INSERT INTO " + prefix + "mailbox_blocks (server_id, world, x, y, z, created_at) "
+                + "VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE world=VALUES(world), x=VALUES(x), y=VALUES(y), z=VALUES(z)";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, serverId);
+            ps.setString(2, world);
+            ps.setInt(3, x);
+            ps.setInt(4, y);
+            ps.setInt(5, z);
+            ps.setLong(6, System.currentTimeMillis());
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new StorageException("savePublicMailboxBlock failed", ex);
+        }
+    }
+
+    @Override
+    public boolean deletePublicMailboxBlock(String serverId) {
+        String sql = "DELETE FROM " + prefix + "mailbox_blocks WHERE server_id=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, serverId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            throw new StorageException("deletePublicMailboxBlock failed", ex);
+        }
+    }
+    @Override
     public void saveItemTemplate(String code, ItemStack item) {
         byte[] data = ItemSerializer.serialize(item);
         String sql = "INSERT INTO " + prefix + "item_templates (code, item_data, created_at) "

@@ -320,10 +320,31 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 2) {
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox bind &7绑定准星方块为你的邮箱");
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox unbind &7解除绑定");
-            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox info &7查看当前绑定");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox bind [玩家] &7绑定准星方块为邮箱");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox unbind [玩家] &7解除绑定");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox info [玩家] &7查看当前绑定");
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox public <bind|unbind|info> &7设置本服公共邮箱方块");
+            Msg.send(sender, config.getPrefix(), "&7带玩家名或 public 需要 &fyizhan.admin");
             return;
+        }
+        if (args[1].equalsIgnoreCase("public")) {
+            publicMailbox(player, args);
+            return;
+        }
+        boolean self = args.length < 3;
+        UUID target = player.getUniqueId();
+        String targetName = player.getName();
+        if (!self) {
+            if (!player.hasPermission("yizhan.admin")) {
+                Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
+                return;
+            }
+            target = resolveTarget(args[2]);
+            if (target == null) {
+                Msg.send(sender, config.getPrefix(), "&c找不到玩家 &f" + args[2]);
+                return;
+            }
+            targetName = args[2];
         }
         switch (args[1].toLowerCase(Locale.ROOT)) {
             case "bind" -> {
@@ -332,32 +353,101 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                     Msg.send(sender, config.getPrefix(), "&c请把准星对准一个方块（6 格以内）");
                     return;
                 }
-                storage.savePlayerMailboxBlock(player.getUniqueId(), config.getServerId(),
+                storage.savePlayerMailboxBlock(target, config.getServerId(),
                         block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
-                Msg.send(sender, config.getPrefix(), "&a搞定！&f" + block.getWorld().getName() + " "
-                        + block.getX() + "," + block.getY() + "," + block.getZ()
-                        + " &a就是你的邮箱方块了，右键即可打开邮箱");
+                String pos = block.getWorld().getName() + " " + block.getX() + "," + block.getY() + "," + block.getZ();
+                if (self) {
+                    Msg.send(sender, config.getPrefix(), "&a搞定！&f" + pos + " &a就是你的邮箱方块了，右键即可打开邮箱");
+                } else {
+                    Msg.send(sender, config.getPrefix(), "&a已把 &f" + pos + " &a设为 &f" + targetName + " &a的邮箱方块");
+                    notifyTarget(target, "&a管理员帮你把 &f" + pos + " &a设成了你的邮箱方块，右键即可打开邮箱");
+                }
             }
             case "unbind" -> {
-                if (storage.deletePlayerMailboxBlock(player.getUniqueId(), config.getServerId())) {
-                    Msg.send(sender, config.getPrefix(), "&a邮箱方块已经解绑啦！");
+                if (storage.deletePlayerMailboxBlock(target, config.getServerId())) {
+                    if (self) {
+                        Msg.send(sender, config.getPrefix(), "&a邮箱方块已经解绑啦！");
+                    } else {
+                        Msg.send(sender, config.getPrefix(), "&a已解除 &f" + targetName + " &a的邮箱方块绑定");
+                    }
                 } else {
-                    Msg.send(sender, config.getPrefix(), "&7你尚未绑定邮箱方块");
+                    Msg.send(sender, config.getPrefix(), self ? "&7你尚未绑定邮箱方块" : "&7" + targetName + " 尚未绑定邮箱方块");
                 }
             }
             case "info" -> {
-                MailboxBlock bound = storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId());
+                MailboxBlock bound = storage.getPlayerMailboxBlock(target, config.getServerId());
                 if (bound == null) {
-                    Msg.send(sender, config.getPrefix(), "&7你还没绑定邮箱方块哦，用 &f/yz mailbox bind &7试试");
+                    Msg.send(sender, config.getPrefix(), self
+                            ? "&7你还没绑定邮箱方块哦，用 &f/yz mailbox bind &7试试"
+                            : "&7" + targetName + " 还没绑定邮箱方块");
                 } else {
-                    Msg.send(sender, config.getPrefix(), "&a你的邮箱方块在这里: &f" + bound.world() + " "
-                            + bound.x() + "," + bound.y() + "," + bound.z());
+                    String pos = bound.world() + " " + bound.x() + "," + bound.y() + "," + bound.z();
+                    Msg.send(sender, config.getPrefix(), self
+                            ? "&a你的邮箱方块在这里: &f" + pos
+                            : "&a" + targetName + " 的邮箱方块: &f" + pos);
                 }
             }
-            default -> Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox <bind|unbind|info>");
+            default -> Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mailbox <bind|unbind|info> [玩家] &7或 &f/yz mailbox public <bind|unbind|info>");
         }
     }
 
+    private void publicMailbox(Player player, String[] args) {
+        if (!player.hasPermission("yizhan.admin")) {
+            Msg.send(player, config.getPrefix(), config.getNoPermissionMessage());
+            return;
+        }
+        if (args.length < 3) {
+            Msg.send(player, config.getPrefix(), "&7用法: &f/yz mailbox public <bind|unbind|info>");
+            return;
+        }
+        switch (args[2].toLowerCase(Locale.ROOT)) {
+            case "bind" -> {
+                Block block = player.getTargetBlockExact(6);
+                if (block == null) {
+                    Msg.send(player, config.getPrefix(), "&c请把准星对准一个方块（6 格以内）");
+                    return;
+                }
+                storage.savePublicMailboxBlock(config.getServerId(),
+                        block.getWorld().getName(), block.getX(), block.getY(), block.getZ());
+                Msg.send(player, config.getPrefix(), "&a本服公共邮箱方块已设为 &f" + block.getWorld().getName() + " "
+                        + block.getX() + "," + block.getY() + "," + block.getZ()
+                        + " &7（谁右键它都会打开自己的邮箱，每台子服各自设置一个）");
+            }
+            case "unbind" -> {
+                if (storage.deletePublicMailboxBlock(config.getServerId())) {
+                    Msg.send(player, config.getPrefix(), "&a本服公共邮箱方块已解除");
+                } else {
+                    Msg.send(player, config.getPrefix(), "&7本服还没有设置公共邮箱方块");
+                }
+            }
+            case "info" -> {
+                MailboxBlock bound = storage.getPublicMailboxBlock(config.getServerId());
+                if (bound == null) {
+                    Msg.send(player, config.getPrefix(), "&7本服还没有设置公共邮箱方块");
+                } else {
+                    Msg.send(player, config.getPrefix(), "&a本服公共邮箱方块: &f" + bound.world() + " "
+                            + bound.x() + "," + bound.y() + "," + bound.z());
+                }
+            }
+            default -> Msg.send(player, config.getPrefix(), "&7用法: &f/yz mailbox public <bind|unbind|info>");
+        }
+    }
+
+    private UUID resolveTarget(String name) {
+        Player online = Bukkit.getPlayerExact(name);
+        if (online != null) {
+            return online.getUniqueId();
+        }
+        OfflinePlayer offline = Bukkit.getOfflinePlayer(name);
+        return offline.hasPlayedBefore() ? offline.getUniqueId() : null;
+    }
+
+    private void notifyTarget(UUID uuid, String message) {
+        Player online = Bukkit.getPlayer(uuid);
+        if (online != null) {
+            Msg.send(online, config.getPrefix(), message);
+        }
+    }
     private void dailyReward(CommandSender sender, String[] args) {
         if (!sender.hasPermission("yizhan.admin")) {
             Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
@@ -982,7 +1072,8 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         Msg.send(sender, config.getPrefix(), "&f/yz open <名称> &7远程打开驿站");
         Msg.send(sender, config.getPrefix(), "&f/yz list &7列出所有驿站");
         Msg.send(sender, config.getPrefix(), "&f/yz info <名称> &7查看驿站详情");
-        Msg.send(sender, config.getPrefix(), "&f/yz mailbox <bind|unbind|info> &7设置全服邮箱方块");
+        Msg.send(sender, config.getPrefix(), "&f/yz mailbox <bind|unbind|info> [玩家] &7绑定邮箱方块（带玩家名需 yizhan.admin）");
+        Msg.send(sender, config.getPrefix(), "&f/yz mailbox public <bind|unbind|info> &7设置本服公共邮箱方块");
         Msg.send(sender, config.getPrefix(), "&f/yz mail send <玩家> [数量] &7把主手物品发到对方邮箱");
         Msg.send(sender, config.getPrefix(), "&f/yz mail give <玩家> <物品ID> <数量> [消息] &7发送指定物品并自定义通知");
         Msg.send(sender, config.getPrefix(), "&f/yz dailyreward add &7把主手物品登记为每日奖励（支持自定义物品）");
@@ -1073,7 +1164,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                 return stationNames(args[1]);
             }
             if (sub.equals("mailbox")) {
-                return filtered(Arrays.asList("bind", "unbind", "info"), args[1]);
+                return filtered(Arrays.asList("bind", "unbind", "info", "public"), args[1]);
             }
             if (sub.equals("mail")) {
                 return filtered(Arrays.asList("send", "give"), args[1]);
@@ -1094,6 +1185,12 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             }
             if (sub.equals("mail")) {
                 return onlineNames(args[2]);
+            }
+            if (sub.equals("mailbox") && !args[1].equalsIgnoreCase("public")) {
+                return onlineNames(args[2]);
+            }
+            if (sub.equals("mailbox")) {
+                return filtered(Arrays.asList("bind", "unbind", "info"), args[2]);
             }
             if (sub.equals("dailyreward") && args[1].equalsIgnoreCase("remove")) {
                 return filtered(Arrays.asList("0", "1", "2", "3", "4", "5"), args[2]);
