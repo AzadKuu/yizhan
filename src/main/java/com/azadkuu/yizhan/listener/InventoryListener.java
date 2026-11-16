@@ -397,7 +397,12 @@ public class InventoryListener implements Listener {
             return false;
         }
         Byte flag = meta.getPersistentDataContainer().get(linkBookKey(), PersistentDataType.BYTE);
-        return flag != null && flag == 1;
+        if (flag != null && flag == 1) {
+            return true;
+        }
+        // 兜底：客户端编辑成书后个别情况可能不留 PDC 标记，只要页里有 http 链接就按链接邮件处理
+        return item.getType() == org.bukkit.Material.WRITABLE_BOOK
+                && readLinkBook(item).contains("http");
     }
 
     private String readLinkBook(ItemStack item) {
