@@ -197,6 +197,11 @@ public class InventoryListener implements Listener {
         int raw = event.getRawSlot();
         int guiSize = top.getSize();
         int items = config.getMailboxSize();
+        if (mailbox.isReclaiming()) {
+            // 补领还在异步跑，此时任何点击都可能基于旧快照
+            event.setCancelled(true);
+            return;
+        }
         if (raw < 0) {
             return;
         }
@@ -1071,6 +1076,7 @@ public class InventoryListener implements Listener {
         Set<Integer> clearSlots = new TreeSet<>(holder.getOriginalSlots());
         clearSlots.removeAll(snapshot.keySet());
         holder.setOriginalSlots(snapshot.keySet());
+        holder.setReclaiming(true);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             int moved;
             int pending;
@@ -1082,13 +1088,18 @@ public class InventoryListener implements Listener {
                 pending = storage.countMailboxOverflow(owner);
             } catch (RuntimeException ex) {
                 plugin.getLogger().warning("重新领取邮件失败: " + ex.getMessage());
-                Bukkit.getScheduler().runTask(plugin,
-                        () -> Msg.send(player, config.getPrefix(), config.getReclaimFailedMessage()));
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    holder.setReclaiming(false);
+                    if (player.isOnline()) {
+                        Msg.send(player, config.getPrefix(), config.getReclaimFailedMessage());
+                    }
+                });
                 return;
             }
             final int movedFinal = moved;
             final int pendingFinal = pending;
             Bukkit.getScheduler().runTask(plugin, () -> {
+                holder.setReclaiming(false);
                 if (guiManager.getOpenMailbox(owner) != holder) {
                     return;
                 }
