@@ -13,6 +13,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 
 import java.util.ArrayList;
@@ -37,6 +38,31 @@ public class InteractListener implements Listener {
                 && mailboxBlock.x() == block.getX()
                 && mailboxBlock.y() == block.getY()
                 && mailboxBlock.z() == block.getZ();
+    }
+
+    /** 这个方块是不是邮箱（个人绑定的或本服公共邮箱）。 */
+    private boolean isMailbox(Block block) {
+        if (isMailboxBlock(storage.getPublicMailboxBlock(config.getServerId()), block)) {
+            return true;
+        }
+        return !storage.findMailboxOwners(config.getServerId(), block.getWorld().getName(),
+                block.getX(), block.getY(), block.getZ()).isEmpty();
+    }
+
+    /** 邮箱方块不允许被挖掘（OP 例外，方便运维）。 */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBreak(BlockBreakEvent event) {
+        Player player = event.getPlayer();
+        if (player.isOp()) {
+            return;
+        }
+        Block block = event.getBlock();
+        if (!isMailbox(block)) {
+            return;
+        }
+        event.setCancelled(true);
+        Msg.send(player, config.getPrefix(),
+                "&c这是邮箱方块，不能挖哦！&7（自己的邮箱可以用 &f/yz mailbox unbind &7解绑）");
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
