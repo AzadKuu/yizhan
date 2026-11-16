@@ -1739,12 +1739,13 @@ public class MysqlStorage implements Storage {
 
     @Override
     public List<LinkMail> listLinkMails(UUID recipient, String serverId) {
+        // 邮箱本身是跨子服的（yz_mailbox_items 只按玩家 uuid 存），链接邮件同理不能按子服过滤，
+        // 否则收件人在别的子服打开邮箱会看到空列表。server_id 只用于统计，不做可见性过滤。
         String sql = "SELECT id, sender_uuid, sender_name, url, created_at, read_at FROM " + prefix
-                + "link_mails WHERE recipient_uuid=? AND server_id=? ORDER BY created_at DESC, id DESC";
+                + "link_mails WHERE recipient_uuid=? ORDER BY created_at DESC, id DESC";
         List<LinkMail> out = new ArrayList<>();
         try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, recipient.toString());
-            ps.setString(2, serverId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     UUID sender;

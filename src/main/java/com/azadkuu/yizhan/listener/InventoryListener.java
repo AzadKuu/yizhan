@@ -498,11 +498,9 @@ public class InventoryListener implements Listener {
             return;
         }
         holder.setConfirmed(true);
-        giveOrDrop(player, book);
+        // 书就是这次寄件本身，不再退回给发件人
         plugin.getMailboxService().deliverLink(holder.getTarget(), player.getUniqueId(), player.getName(), url,
-                config.getMailReceivedFromMessage()
-                        .replace("%amount%", "1")
-                        .replace("%item%", "视频链接")
+                config.getLinkMailReceivedFromMessage()
                         .replace("%sender%", player.getName()));
         Msg.send(player, config.getPrefix(), "&a链接已寄给 &f" + holder.getTargetName());
         player.closeInventory();
@@ -565,6 +563,7 @@ public class InventoryListener implements Listener {
             Msg.send(player, Msg.component("&7来自 &f" + mail.senderName() + " &7的链接："));
             Msg.send(player, Msg.component("&b→ ")
                     .append(LinkGuard.linkText(mail.url(), config.getLinkWhitelist())));
+            Msg.send(player, Msg.component("&8点不开的话，手动复制：&7" + mail.url()));
         }
     }
 

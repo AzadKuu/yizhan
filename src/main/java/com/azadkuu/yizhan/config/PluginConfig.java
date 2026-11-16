@@ -74,6 +74,7 @@ public class PluginConfig {
     private List<String> linkWhitelist = new ArrayList<>();
     private int linkMailMaxLength;
     private int linkMailMaxPerDay;
+    private String linkMailReceivedFromMessage;
     private boolean dailyRewardEnabled;
     private String dailyRewardMessage;
     private final List<DailyRewardItem> dailyRewardItems = new ArrayList<>();
@@ -204,6 +205,8 @@ public class PluginConfig {
         this.linkWhitelist = splitList(cfg.getString("mail-link.whitelist", "bilibili.com,b23.tv,bili2233.cn"));
         this.linkMailMaxLength = Math.max(16, cfg.getInt("mail-link.max-length", 512));
         this.linkMailMaxPerDay = Math.max(1, cfg.getInt("mail-link.max-per-day", 20));
+        this.linkMailReceivedFromMessage = cfg.getString("mail-link.received-from",
+                "&a你收到了一条来自 &f%sender% &a的视频链接 &7（在邮箱「链接邮件」里查看）");
         this.dailyRewardEnabled = cfg.getBoolean("daily-reward.enabled", false);
         this.dailyRewardMessage = cfg.getString("daily-reward.message", "&a每日奖励已发放到你的邮箱");
         dailyRewardItems.clear();
@@ -415,6 +418,10 @@ public class PluginConfig {
 
     public int getLinkMailMaxLength() {
         return linkMailMaxLength;
+    }
+
+    public String getLinkMailReceivedFromMessage() {
+        return linkMailReceivedFromMessage;
     }
 
     public int getLinkMailMaxPerDay() {
