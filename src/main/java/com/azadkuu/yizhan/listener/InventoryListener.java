@@ -132,12 +132,13 @@ public class InventoryListener implements Listener {
         }
 
         if (holder.getView() == StationHolder.View.RECEIVE) {
+            event.setCancelled(true);
             if (isInsert(event, guiSize)) {
-                event.setCancelled(true);
                 Msg.send(player, config.getPrefix(), config.getReceiveOnlyMessage());
-            } else {
-                holder.setDirty(true);
+                return;
             }
+            handleStationTake(player, holder,
+                    event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY ? -1 : raw);
             return;
         }
 
@@ -357,6 +358,12 @@ public class InventoryListener implements Listener {
             Msg.send(player, config.getPrefix(), "&7邮寄区还是空的，先放点要寄的东西吧");
             return;
         }
+        for (ItemStack item : items) {
+            if (filter.isBlocked(item)) {
+                sendItemBlocked(player, item, config.getItemBlockedMessage());
+                return;
+            }
+        }
         for (int i = 0; i < inputSlots; i++) {
             top.setItem(i, null);
         }
@@ -367,7 +374,17 @@ public class InventoryListener implements Listener {
                 .replace("%item%", itemName)
                 .replace("%sender%", player.getName());
         try {
-            plugin.getMailboxService().deliver(holder.getTarget(), items, receive);
+            plugin.getMailboxService().deliver(holder.getTarget(), items, receive, failed -> {
+                if (!player.isOnline()) {
+                    plugin.getLogger().warning("投递邮箱失败且玩家已离线，" + failed.size()
+                            + " 组物品未能退回: " + player.getName());
+                    return;
+                }
+                for (ItemStack item : failed) {
+                    giveOrDrop(player, item);
+                }
+                Msg.send(player, config.getPrefix(), config.getClaimFailedMessage());
+            });
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("send mail to " + holder.getTarget() + " failed: " + ex.getMessage());
             for (ItemStack item : items) {
@@ -580,6 +597,7 @@ public class InventoryListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onDrag(InventoryDragEvent event) {
         Inventory top = event.getView().getTopInventory();
+        Player dragPlayer = event.getWhoClicked() instanceof Player p ? p : null;
         if (top.getHolder() instanceof ContactsHolder) {
             event.setCancelled(true);
             return;
@@ -592,6 +610,16 @@ public class InventoryListener implements Listener {
             for (int slot : event.getRawSlots()) {
                 if (slot >= send.getInputSlots() && slot < top.getSize()) {
                     event.setCancelled(true);
+                    return;
+                }
+            }
+            // 拖拽进去的物品也要过一遍黑名单，否则可以绕过过滤把禁寄物品塞进邮寄区
+            for (Map.Entry<Integer, ItemStack> entry : event.getNewItems().entrySet()) {
+                if (entry.getKey() < send.getInputSlots() && filter.isBlocked(entry.getValue())) {
+                    event.setCancelled(true);
+                    if (dragPlayer != null) {
+                        sendItemBlocked(dragPlayer, entry.getValue(), config.getItemBlockedMessage());
+                    }
                     return;
                 }
             }
@@ -688,6 +716,75 @@ public class InventoryListener implements Listener {
         } else {
             saveReceive(player, holder);
         }
+    }
+
+    /**
+     * 收件站领取：先按版本号原子提交「扣掉这些槽」，提交成功才把物品交给玩家。
+     * 两人同时开同一个收件站时，后提交的一方会收到冲突提示并重新打开最新界面，
+     * 而不是像以前那样物品已经进背包、版本冲突只提示不回收。
+     */
+    private void handleStationTake(Player player, StationHolder holder, int raw) {
+        Inventory inventory = holder.getInventory();
+        int size = holder.getStation().getSize();
+        Map<Integer, ItemStack> taken = new TreeMap<>();
+        boolean takeAll = raw < 0;
+        if (takeAll) {
+            for (int i = 0; i < size; i++) {
+                ItemStack item = inventory.getItem(i);
+                if (item != null && !item.getType().isAir()) {
+                    taken.put(i, item.clone());
+                }
+            }
+        } else {
+            if (raw >= size) {
+                return;
+            }
+            ItemStack item = inventory.getItem(raw);
+            if (item == null || item.getType().isAir()) {
+                return;
+            }
+            taken.put(raw, item.clone());
+        }
+        if (taken.isEmpty()) {
+            return;
+        }
+        Map<Integer, ItemStack> remaining = new TreeMap<>();
+        for (int i = 0; i < size; i++) {
+            if (taken.containsKey(i)) {
+                continue;
+            }
+            ItemStack item = inventory.getItem(i);
+            if (item != null && !item.getType().isAir()) {
+                remaining.put(i, item.clone());
+            }
+        }
+        int newVersion;
+        try {
+            newVersion = storage.saveStationItems(holder.getStation().getId(), remaining, holder.getBaseVersion());
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("领取提交失败: " + ex.getMessage());
+            Msg.send(player, config.getPrefix(), config.getSaveFailedMessage());
+            return;
+        }
+        if (newVersion < 0) {
+            Msg.send(player, config.getPrefix(), config.getSaveConflictMessage());
+            Station latest = storage.getStation(holder.getStation().getId());
+            if (latest != null) {
+                guiManager.open(player, latest, StationHolder.View.RECEIVE);
+            } else {
+                player.closeInventory();
+            }
+            return;
+        }
+        holder.setBaseVersion(newVersion);
+        holder.getStation().setVersion(newVersion);
+        for (int slot : taken.keySet()) {
+            inventory.setItem(slot, null);
+        }
+        for (ItemStack item : taken.values()) {
+            giveOrDrop(player, item);
+        }
+        player.updateInventory();
     }
 
     private void handleChooser(Player player, StationHolder holder, int raw) {
@@ -984,6 +1081,7 @@ public class InventoryListener implements Listener {
                         inventory.setItem(slot, entry.getValue());
                     }
                 }
+                holder.setOriginalSlots(new TreeSet<>(reloaded.keySet()));
                 holder.setPendingCount(pendingFinal);
                 guiManager.renderMailbox(holder);
                 player.updateInventory();

@@ -35,6 +35,15 @@ public class MailboxService {
     }
 
     public void deliver(UUID target, List<ItemStack> items, String notification) {
+        deliver(target, items, notification, null);
+    }
+
+    /**
+     * 投递到邮箱。异步任务失败时把物品交回 onFailure（在主线程调用），
+     * 避免「GUI 已经清空 + 异步写库失败」导致物品凭空消失。
+     */
+    public void deliver(UUID target, List<ItemStack> items, String notification,
+                        java.util.function.Consumer<List<ItemStack>> onFailure) {
         // 投递前净化：只保留白名单 open_url，剥掉 run_command 之类可执行点击
         List<ItemStack> safe = new ArrayList<>(items.size());
         for (ItemStack item : items) {
@@ -56,6 +65,9 @@ public class MailboxService {
                 }
             } catch (RuntimeException ex) {
                 plugin.getLogger().warning("投递邮箱失败: " + ex.getMessage());
+                if (onFailure != null) {
+                    Bukkit.getScheduler().runTask(plugin, () -> onFailure.accept(safe));
+                }
                 return;
             }
             notifyOnline(target);

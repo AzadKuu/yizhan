@@ -691,9 +691,13 @@ public class MysqlStorage implements Storage {
         return free;
     }
 
-    private void insertStationItems(Connection c, String stationId, List<Integer> slots, Map<Integer, byte[]> items) throws SQLException {
-        try (PreparedStatement ps = c.prepareStatement("INSERT INTO " + prefix + "station_items (station_id, slot, item_data) VALUES (?,?,?) "
-                + "ON DUPLICATE KEY UPDATE item_data=VALUES(item_data)")) {
+    /**
+     * 往空槽写物品。用 INSERT IGNORE：多台子服同时投递到同一个站点时，
+     * 抢占同一槽位的一方写不进去（返回 0），由调用方回滚重试，而不是静默覆盖别人的货。
+     */
+    private int insertStationItems(Connection c, String stationId, List<Integer> slots, Map<Integer, byte[]> items) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement("INSERT IGNORE INTO " + prefix
+                + "station_items (station_id, slot, item_data) VALUES (?,?,?)")) {
             int index = 0;
             for (byte[] data : items.values()) {
                 ps.setString(1, stationId);
@@ -701,7 +705,13 @@ public class MysqlStorage implements Storage {
                 ps.setBytes(3, data);
                 ps.addBatch();
             }
-            ps.executeBatch();
+            int inserted = 0;
+            for (int count : ps.executeBatch()) {
+                if (count > 0 || count == Statement.SUCCESS_NO_INFO) {
+                    inserted++;
+                }
+            }
+            return inserted;
         }
     }
 
@@ -744,7 +754,11 @@ public class MysqlStorage implements Storage {
                     c.rollback();
                     return DeliveryResult.WAITING_FULL;
                 }
-                insertStationItems(c, toStation, free, items);
+                if (insertStationItems(c, toStation, free, items) < items.size()) {
+                    // 槽位被别的子服抢走，回滚后等下一轮投递
+                    c.rollback();
+                    return DeliveryResult.SKIPPED;
+                }
                 int affected;
                 try (PreparedStatement ps = c.prepareStatement("UPDATE " + prefix
                         + "shipments SET status='DELIVERED', full_since=NULL, version=version+1 WHERE id=? AND status='IN_TRANSIT'")) {

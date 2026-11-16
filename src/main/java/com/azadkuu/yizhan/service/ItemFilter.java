@@ -34,6 +34,44 @@ public class ItemFilter {
 
     @SuppressWarnings("deprecation")
     public boolean isBlocked(ItemStack item) {
+        return isBlockedInternal(item, 0);
+    }
+
+    /** 递归检查潜影盒 / 收纳袋里的内容，防止把禁寄物品装进容器带过过滤。 */
+    private String containerReason(ItemStack item, int depth) {
+        if (depth >= 3) {
+            return null;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return null;
+        }
+        if (meta instanceof org.bukkit.inventory.meta.BundleMeta bundle) {
+            for (ItemStack inner : bundle.getItems()) {
+                if (inner == null || inner.getType().isAir()) {
+                    continue;
+                }
+                if (isBlockedInternal(inner, depth + 1)) {
+                    return "容器内容命中禁寄规则=" + inner.getType().name();
+                }
+            }
+        }
+        if (meta instanceof org.bukkit.inventory.meta.BlockStateMeta stateMeta
+                && stateMeta.getBlockState() instanceof org.bukkit.block.Container container) {
+            for (ItemStack inner : container.getInventory().getContents()) {
+                if (inner == null || inner.getType().isAir()) {
+                    continue;
+                }
+                if (isBlockedInternal(inner, depth + 1)) {
+                    return "容器内容命中禁寄规则=" + inner.getType().name();
+                }
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean isBlockedInternal(ItemStack item, int depth) {
         if (item == null || item.getType().isAir()) {
             return false;
         }
@@ -87,6 +125,9 @@ public class ItemFilter {
         }
         if (reason == null && config.isBlockCustomModelData() && meta.hasCustomModelData()) {
             reason = "命中custom-model-data=" + meta.getCustomModelData();
+        }
+        if (reason == null) {
+            reason = containerReason(item, depth);
         }
         if (config.isDebug() && debugLog != null) {
             debugLog.accept("检查 " + item.getType().name()
