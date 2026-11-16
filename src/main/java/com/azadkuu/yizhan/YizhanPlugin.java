@@ -105,7 +105,9 @@ public final class YizhanPlugin extends JavaPlugin {
     public void reload() {
         reloadConfig();
         config.load(getConfig());
-        getLogger().info("配置已重载, debug=" + config.isDebug());
+        this.linkGuard = new com.azadkuu.yizhan.util.LinkGuard(config.getLinkWhitelist());
+        getLogger().info("配置已重载, debug=" + config.isDebug()
+                + ", 链接白名单=" + config.getLinkWhitelist());
         logItemFilter();
     }
 

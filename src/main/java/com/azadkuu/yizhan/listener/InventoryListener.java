@@ -450,6 +450,17 @@ public class InventoryListener implements Listener {
         ItemStack book = top.getItem(slot);
         String raw = readLinkBook(book);
         top.setItem(slot, null);
+        // 邮寄区里除这本书以外的物品先退回，confirmed=true 之后 onClose 不会再退
+        for (int i = 0; i < holder.getInputSlots(); i++) {
+            if (i == slot) {
+                continue;
+            }
+            ItemStack other = top.getItem(i);
+            if (other != null && !other.getType().isAir()) {
+                top.setItem(i, null);
+                giveOrDrop(player, other);
+            }
+        }
         String url = plugin.getLinkGuard().firstAllowedUrl(raw);
         if (url == null) {
             giveOrDrop(player, book);
