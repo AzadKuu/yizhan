@@ -70,6 +70,10 @@ public class PluginConfig {
     private long dbConnectionTimeoutMs;
 
     private int mailboxSize;
+    private boolean linkMailEnabled;
+    private List<String> linkWhitelist = new ArrayList<>();
+    private int linkMailMaxLength;
+    private int linkMailMaxPerDay;
     private boolean dailyRewardEnabled;
     private String dailyRewardMessage;
     private final List<DailyRewardItem> dailyRewardItems = new ArrayList<>();
@@ -196,6 +200,10 @@ public class PluginConfig {
         }
 
         this.mailboxSize = clampSize(cfg.getInt("mailbox.size", 45));
+        this.linkMailEnabled = cfg.getBoolean("mail-link.enabled", true);
+        this.linkWhitelist = splitList(cfg.getString("mail-link.whitelist", "bilibili.com,b23.tv,bili2233.cn"));
+        this.linkMailMaxLength = Math.max(16, cfg.getInt("mail-link.max-length", 512));
+        this.linkMailMaxPerDay = Math.max(1, cfg.getInt("mail-link.max-per-day", 20));
         this.dailyRewardEnabled = cfg.getBoolean("daily-reward.enabled", false);
         this.dailyRewardMessage = cfg.getString("daily-reward.message", "&a每日奖励已发放到你的邮箱");
         dailyRewardItems.clear();
@@ -395,6 +403,36 @@ public class PluginConfig {
 
     public int getMailboxSize() {
         return mailboxSize;
+    }
+
+    public boolean isLinkMailEnabled() {
+        return linkMailEnabled;
+    }
+
+    public List<String> getLinkWhitelist() {
+        return linkWhitelist;
+    }
+
+    public int getLinkMailMaxLength() {
+        return linkMailMaxLength;
+    }
+
+    public int getLinkMailMaxPerDay() {
+        return linkMailMaxPerDay;
+    }
+
+    /** 逗号 / 空格分隔的字符串拆成列表。 */
+    private static List<String> splitList(String raw) {
+        List<String> out = new ArrayList<>();
+        if (raw == null || raw.isBlank()) {
+            return out;
+        }
+        for (String part : raw.split("[,，\\s]+")) {
+            if (!part.isBlank()) {
+                out.add(part.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        return out;
     }
 
     public boolean isDailyRewardEnabled() {

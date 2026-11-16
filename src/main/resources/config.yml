@@ -71,6 +71,12 @@ item-filter:
   allowed-items: []
   blocked-materials: []          # 原版物品黑名单，按材质名，例如 ["paper","diamond_sword"]，可带 minecraft: 前缀
   block-custom-model-data: false
+mail-link:
+  enabled: true                    # 允许在「发送邮件」界面寄一条链接（不是物品）
+  # 白名单域名，逗号分隔；子域名自动包含（bilibili.com 覆盖 www./m./live./space./t.）
+  whitelist: "bilibili.com,b23.tv,bili2233.cn"
+  max-length: 512                  # 单条链接最长字符数
+  max-per-day: 20                  # 每人每天最多寄多少条链接邮件
 mailbox:
   size: 45                       # 每个玩家独立邮箱的容量（9-45，会向上取整到整行）
 daily-reward:

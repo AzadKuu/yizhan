@@ -1,6 +1,7 @@
 package com.azadkuu.yizhan.storage;
 
 import com.azadkuu.yizhan.model.DeliveryResult;
+import com.azadkuu.yizhan.model.LinkMail;
 import com.azadkuu.yizhan.model.MailContact;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Notification;
@@ -124,6 +125,18 @@ public interface Storage extends AutoCloseable {
     List<MailContact> listMailContacts(UUID owner, String serverId);
 
     List<UUID> findMailboxOwners(String serverId, String world, int x, int y, int z);
+
+    /** 投递一封链接邮件，返回自增 id。 */
+    long addLinkMail(UUID recipient, UUID sender, String senderName, String serverId, String url);
+
+    /** 某人在本服的链接邮件，最近的在前。 */
+    List<LinkMail> listLinkMails(UUID recipient, String serverId);
+
+    /** 标记已读（只能标自己的）。 */
+    boolean markLinkMailRead(long id, UUID recipient);
+
+    /** 该玩家本服在 since 之后发出去的链接邮件数量，用于限流。 */
+    int countLinkMailsSince(UUID sender, String serverId, long since);
 
     void saveItemTemplate(String code, ItemStack item);
 

@@ -26,6 +26,7 @@ public final class YizhanPlugin extends JavaPlugin {
     private NotificationService notificationService;
     private MailboxService mailboxService;
     private GuiManager guiManager;
+    private com.azadkuu.yizhan.util.LinkGuard linkGuard;
     private int deliveryTaskId = -1;
     private int notificationTaskId = -1;
 
@@ -45,6 +46,7 @@ public final class YizhanPlugin extends JavaPlugin {
             return;
         }
 
+        this.linkGuard = new com.azadkuu.yizhan.util.LinkGuard(config.getLinkWhitelist());
         this.itemFilter = new ItemFilter(config, msg -> getLogger().info("[debug] " + msg));
         this.transport = new TransportService(config, storage);
         this.notificationService = new NotificationService(config, storage);
@@ -105,6 +107,10 @@ public final class YizhanPlugin extends JavaPlugin {
         config.load(getConfig());
         getLogger().info("配置已重载, debug=" + config.isDebug());
         logItemFilter();
+    }
+
+    public com.azadkuu.yizhan.util.LinkGuard getLinkGuard() {
+        return linkGuard;
     }
 
     private void logItemFilter() {

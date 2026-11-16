@@ -35,9 +35,14 @@ public class MailboxService {
     }
 
     public void deliver(UUID target, List<ItemStack> items, String notification) {
+        // 投递前净化：只保留白名单 open_url，剥掉 run_command 之类可执行点击
+        List<ItemStack> safe = new ArrayList<>(items.size());
+        for (ItemStack item : items) {
+            safe.add(plugin.getLinkGuard().sanitize(item));
+        }
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                int stashed = storage.depositToMailbox(target, items, config.getMailboxSize());
+                int stashed = storage.depositToMailbox(target, safe, config.getMailboxSize());
                 if (stashed > 0) {
                     plugin.getLogger().warning("邮箱已满，" + stashed + " 组物品暂存待领取: " + target);
                 }
@@ -51,6 +56,22 @@ public class MailboxService {
                 }
             } catch (RuntimeException ex) {
                 plugin.getLogger().warning("投递邮箱失败: " + ex.getMessage());
+                return;
+            }
+            notifyOnline(target);
+        });
+    }
+
+    /** 投递一封链接邮件（只存链接，不占邮箱物品格）。 */
+    public void deliverLink(UUID target, UUID sender, String senderName, String url, String notification) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                storage.addLinkMail(target, sender, senderName, config.getServerId(), url);
+                if (notification != null && !notification.isBlank()) {
+                    storage.pushNotification(target, notification);
+                }
+            } catch (RuntimeException ex) {
+                plugin.getLogger().warning("投递链接邮件失败: " + ex.getMessage());
                 return;
             }
             notifyOnline(target);

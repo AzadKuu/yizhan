@@ -3,10 +3,13 @@ package com.azadkuu.yizhan.listener;
 import com.azadkuu.yizhan.YizhanPlugin;
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.gui.GuiManager;
+import com.azadkuu.yizhan.gui.LinkMailListHolder;
+import com.azadkuu.yizhan.gui.LinkMailViewHolder;
 import com.azadkuu.yizhan.gui.ContactsHolder;
 import com.azadkuu.yizhan.gui.DiscardedHolder;
 import com.azadkuu.yizhan.gui.MailSendHolder;
 import com.azadkuu.yizhan.gui.MailboxHolder;
+import com.azadkuu.yizhan.model.LinkMail;
 import com.azadkuu.yizhan.model.MailContact;
 import com.azadkuu.yizhan.gui.StationHolder;
 import com.azadkuu.yizhan.model.Route;
@@ -15,6 +18,7 @@ import com.azadkuu.yizhan.service.ItemFilter;
 import com.azadkuu.yizhan.service.NotificationService;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.Storage;
+import com.azadkuu.yizhan.util.LinkGuard;
 import com.azadkuu.yizhan.util.Msg;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -26,7 +30,11 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.WritableBookMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -76,6 +84,14 @@ public class InventoryListener implements Listener {
         }
         if (top.getHolder() instanceof MailSendHolder send) {
             handleMailSendClick(event, player, top, send);
+            return;
+        }
+        if (top.getHolder() instanceof LinkMailListHolder linkList) {
+            handleLinkMailListClick(event, player, top, linkList);
+            return;
+        }
+        if (top.getHolder() instanceof LinkMailViewHolder linkView) {
+            handleLinkMailViewClick(event, player, top, linkView);
             return;
         }
         if (!(top.getHolder() instanceof StationHolder holder)) {
@@ -193,6 +209,8 @@ public class InventoryListener implements Listener {
                 reclaimMailbox(player, mailbox);
             } else if (raw == GuiManager.mailSlotContacts(items)) {
                 guiManager.openContacts(player, 0);
+            } else if (raw == GuiManager.mailSlotLinks(items)) {
+                guiManager.openLinkMails(player, 0);
             }
         }
     }
@@ -308,6 +326,8 @@ public class InventoryListener implements Listener {
             guiManager.openContacts(player, 0);
         } else if (raw == 49) {
             confirmMailSend(player, top, holder);
+        } else if (raw == 51) {
+            giveLinkBook(player);
         } else if (raw == 53) {
             player.closeInventory();
         }
@@ -315,6 +335,17 @@ public class InventoryListener implements Listener {
 
     private void confirmMailSend(Player player, Inventory top, MailSendHolder holder) {
         int inputSlots = holder.getInputSlots();
+        int linkSlot = -1;
+        for (int i = 0; i < inputSlots; i++) {
+            if (isLinkBook(top.getItem(i))) {
+                linkSlot = i;
+                break;
+            }
+        }
+        if (linkSlot >= 0) {
+            sendLinkMail(player, top, holder, linkSlot);
+            return;
+        }
         List<ItemStack> items = new ArrayList<>();
         for (int i = 0; i < inputSlots; i++) {
             ItemStack item = top.getItem(i);
@@ -353,6 +384,165 @@ public class InventoryListener implements Listener {
         player.closeInventory();
     }
 
+    private NamespacedKey linkBookKey() {
+        return new NamespacedKey(plugin, "link_mail");
+    }
+
+    private boolean isLinkBook(ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return false;
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return false;
+        }
+        Byte flag = meta.getPersistentDataContainer().get(linkBookKey(), PersistentDataType.BYTE);
+        return flag != null && flag == 1;
+    }
+
+    private String readLinkBook(ItemStack item) {
+        if (item == null) {
+            return "";
+        }
+        ItemMeta meta = item.getItemMeta();
+        if (meta instanceof WritableBookMeta book) {
+            List<String> pages = book.getPages();
+            if (pages == null || pages.isEmpty()) {
+                return "";
+            }
+            return String.join(" ", pages);
+        }
+        return "";
+    }
+
+    private void giveLinkBook(Player player) {
+        if (!config.isLinkMailEnabled()) {
+            Msg.send(player, config.getPrefix(), "&7本服没有开放寄链接的功能");
+            return;
+        }
+        ItemStack book = new ItemStack(org.bukkit.Material.WRITABLE_BOOK);
+        ItemMeta meta = book.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Msg.component("&b链接邮件"));
+            meta.lore(List.of(
+                    Msg.component("&7把视频链接写在书里"),
+                    Msg.component("&7写完放回上面的邮寄区"),
+                    Msg.component("&7再点「确认发送」")));
+            if (meta instanceof WritableBookMeta writable) {
+                writable.setPages("把视频链接写在这一页（支持 bilibili.com / b23.tv），"
+                        + "然后把书放回邮寄区，再点「确认发送」。");
+            }
+            meta.getPersistentDataContainer().set(linkBookKey(), PersistentDataType.BYTE, (byte) 1);
+            book.setItemMeta(meta);
+        }
+        if (!player.getInventory().addItem(book).isEmpty()) {
+            giveOrDrop(player, book);
+        }
+        Msg.send(player, config.getPrefix(), "&a拿到一本「链接邮件」书：&7写上链接，放回邮寄区再确认");
+    }
+
+    private void sendLinkMail(Player player, Inventory top, MailSendHolder holder, int slot) {
+        ItemStack book = top.getItem(slot);
+        String raw = readLinkBook(book);
+        top.setItem(slot, null);
+        String url = plugin.getLinkGuard().firstAllowedUrl(raw);
+        if (url == null) {
+            giveOrDrop(player, book);
+            Msg.send(player, config.getPrefix(), "&c书里没有白名单链接：&7只支持 "
+                    + String.join(" / ", config.getLinkWhitelist()));
+            return;
+        }
+        if (url.length() > config.getLinkMailMaxLength()) {
+            giveOrDrop(player, book);
+            Msg.send(player, config.getPrefix(), "&c链接太长了（上限 " + config.getLinkMailMaxLength() + " 字符）");
+            return;
+        }
+        int sent = storage.countLinkMailsSince(player.getUniqueId(), config.getServerId(),
+                System.currentTimeMillis() - 86_400_000L);
+        if (sent >= config.getLinkMailMaxPerDay()) {
+            giveOrDrop(player, book);
+            Msg.send(player, config.getPrefix(), "&c今天已经寄了 " + sent + " 条链接，明天再来吧");
+            return;
+        }
+        holder.setConfirmed(true);
+        giveOrDrop(player, book);
+        plugin.getMailboxService().deliverLink(holder.getTarget(), player.getUniqueId(), player.getName(), url,
+                config.getMailReceivedFromMessage()
+                        .replace("%amount%", "1")
+                        .replace("%item%", "视频链接")
+                        .replace("%sender%", player.getName()));
+        Msg.send(player, config.getPrefix(), "&a链接已寄给 &f" + holder.getTargetName());
+        player.closeInventory();
+    }
+
+    private void handleLinkMailListClick(InventoryClickEvent event, Player player, Inventory top,
+                                        LinkMailListHolder holder) {
+        int raw = event.getRawSlot();
+        if (raw < 0) {
+            return;
+        }
+        if (raw >= top.getSize()) {
+            if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+        event.setCancelled(true);
+        if (raw == GuiManager.contactSlotClose()) {
+            player.closeInventory();
+            return;
+        }
+        if (raw == GuiManager.contactSlotPrev()) {
+            guiManager.openLinkMails(player, holder.getPage() - 1);
+            return;
+        }
+        if (raw == GuiManager.contactSlotNext()) {
+            guiManager.openLinkMails(player, holder.getPage() + 1);
+            return;
+        }
+        int index = holder.getPage() * GuiManager.LINK_LIST_SIZE + raw;
+        if (index < 0 || index >= holder.getMails().size()) {
+            return;
+        }
+        LinkMail mail = holder.getMails().get(index);
+        markLinkMailRead(player, mail);
+        guiManager.openLinkMailView(player, mail);
+    }
+
+    private void handleLinkMailViewClick(InventoryClickEvent event, Player player, Inventory top,
+                                        LinkMailViewHolder holder) {
+        int raw = event.getRawSlot();
+        if (raw < 0) {
+            return;
+        }
+        if (raw >= top.getSize()) {
+            if (event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+        event.setCancelled(true);
+        if (raw == 22) {
+            player.closeInventory();
+            return;
+        }
+        if (raw == 15) {
+            LinkMail mail = holder.getMail();
+            player.closeInventory();
+            Msg.send(player, Msg.component("&7来自 &f" + mail.senderName() + " &7的链接："));
+            Msg.send(player, Msg.component("&b→ ")
+                    .append(LinkGuard.linkText(mail.url(), config.getLinkWhitelist())));
+        }
+    }
+
+    private void markLinkMailRead(Player player, LinkMail mail) {
+        if (mail.read()) {
+            return;
+        }
+        UUID uuid = player.getUniqueId();
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> storage.markLinkMailRead(mail.id(), uuid));
+    }
+
     private void returnMailSendItems(Player player, MailSendHolder holder) {
         if (holder.isConfirmed()) {
             return;
@@ -375,6 +565,10 @@ public class InventoryListener implements Listener {
     public void onDrag(InventoryDragEvent event) {
         Inventory top = event.getView().getTopInventory();
         if (top.getHolder() instanceof ContactsHolder) {
+            event.setCancelled(true);
+            return;
+        }
+        if (top.getHolder() instanceof LinkMailListHolder || top.getHolder() instanceof LinkMailViewHolder) {
             event.setCancelled(true);
             return;
         }

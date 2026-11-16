@@ -2,6 +2,7 @@ package com.azadkuu.yizhan.storage;
 
 import com.azadkuu.yizhan.config.PluginConfig;
 import com.azadkuu.yizhan.model.DeliveryResult;
+import com.azadkuu.yizhan.model.LinkMail;
 import com.azadkuu.yizhan.model.MailContact;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Notification;
@@ -208,6 +209,19 @@ public class MysqlStorage implements Storage {
                         + "server_id VARCHAR(64) NOT NULL,"
                         + "added_at BIGINT NOT NULL,"
                         + "PRIMARY KEY (owner_uuid, contact_uuid, server_id)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+                "CREATE TABLE IF NOT EXISTS " + prefix + "link_mails ("
+                        + "id BIGINT NOT NULL AUTO_INCREMENT,"
+                        + "recipient_uuid VARCHAR(36) NOT NULL,"
+                        + "sender_uuid VARCHAR(36) NOT NULL,"
+                        + "sender_name VARCHAR(64) NOT NULL,"
+                        + "server_id VARCHAR(64) NOT NULL,"
+                        + "url VARCHAR(1024) NOT NULL,"
+                        + "created_at BIGINT NOT NULL,"
+                        + "read_at BIGINT NULL,"
+                        + "PRIMARY KEY (id),"
+                        + "KEY idx_link_mails (recipient_uuid, server_id)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 
                 "CREATE TABLE IF NOT EXISTS " + prefix + "item_templates ("
@@ -1686,6 +1700,82 @@ public class MysqlStorage implements Storage {
             throw new StorageException("findMailboxOwners failed", ex);
         }
         return out;
+    }
+
+    @Override
+    public long addLinkMail(UUID recipient, UUID sender, String senderName, String serverId, String url) {
+        String sql = "INSERT INTO " + prefix + "link_mails "
+                + "(recipient_uuid, sender_uuid, sender_name, server_id, url, created_at) VALUES (?,?,?,?,?,?)";
+        try (Connection c = conn();
+             PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, recipient.toString());
+            ps.setString(2, sender.toString());
+            ps.setString(3, senderName);
+            ps.setString(4, serverId);
+            ps.setString(5, url);
+            ps.setLong(6, System.currentTimeMillis());
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                return rs.next() ? rs.getLong(1) : 0L;
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("addLinkMail failed", ex);
+        }
+    }
+
+    @Override
+    public List<LinkMail> listLinkMails(UUID recipient, String serverId) {
+        String sql = "SELECT id, sender_uuid, sender_name, url, created_at, read_at FROM " + prefix
+                + "link_mails WHERE recipient_uuid=? AND server_id=? ORDER BY created_at DESC, id DESC";
+        List<LinkMail> out = new ArrayList<>();
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, recipient.toString());
+            ps.setString(2, serverId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    UUID sender;
+                    try {
+                        sender = UUID.fromString(rs.getString("sender_uuid"));
+                    } catch (RuntimeException ex) {
+                        continue;
+                    }
+                    long readAt = rs.getLong("read_at");
+                    out.add(new LinkMail(rs.getLong("id"), sender, rs.getString("sender_name"),
+                            rs.getString("url"), rs.getLong("created_at"), !rs.wasNull() && readAt > 0));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("listLinkMails failed", ex);
+        }
+        return out;
+    }
+
+    @Override
+    public boolean markLinkMailRead(long id, UUID recipient) {
+        String sql = "UPDATE " + prefix + "link_mails SET read_at=? WHERE id=? AND recipient_uuid=? AND read_at IS NULL";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, System.currentTimeMillis());
+            ps.setLong(2, id);
+            ps.setString(3, recipient.toString());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            throw new StorageException("markLinkMailRead failed", ex);
+        }
+    }
+
+    @Override
+    public int countLinkMailsSince(UUID sender, String serverId, long since) {
+        String sql = "SELECT COUNT(*) FROM " + prefix + "link_mails WHERE sender_uuid=? AND server_id=? AND created_at>=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, sender.toString());
+            ps.setString(2, serverId);
+            ps.setLong(3, since);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("countLinkMailsSince failed", ex);
+        }
     }
 
     @Override

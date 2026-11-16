@@ -1,6 +1,7 @@
 package com.azadkuu.yizhan.gui;
 
 import com.azadkuu.yizhan.config.PluginConfig;
+import com.azadkuu.yizhan.model.LinkMail;
 import com.azadkuu.yizhan.model.MailContact;
 import com.azadkuu.yizhan.model.MailboxBlock;
 import com.azadkuu.yizhan.model.Route;
@@ -10,6 +11,7 @@ import com.azadkuu.yizhan.model.StationMode;
 import com.azadkuu.yizhan.service.ItemFilter;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.Storage;
+import com.azadkuu.yizhan.util.LinkGuard;
 import com.azadkuu.yizhan.util.Msg;
 import com.azadkuu.yizhan.util.TimeUtil;
 import net.kyori.adventure.text.Component;
@@ -22,6 +24,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -266,6 +271,9 @@ public class GuiManager {
         inventory.setItem(mailSlotContacts(items), button(Material.WRITABLE_BOOK, "&b发送邮件",
                 "&7打开通讯录，给其中的人寄物品",
                 "&7右键别人的邮箱方块即可把他加入通讯录"));
+        inventory.setItem(mailSlotLinks(items), button(Material.BOOK, "&d链接邮件",
+                "&7别人寄给你的视频链接",
+                "&7点开查看，再点一下就能打开"));
         int pending = holder.getPendingCount();
         if (pending > 0) {
             inventory.setItem(mailSlotReclaim(items), button(Material.ENDER_CHEST, "&6重新领取邮件",
@@ -297,6 +305,14 @@ public class GuiManager {
     public static int mailSlotContacts(int items) {
         return items + 2;
     }
+
+    public static int mailSlotLinks(int items) {
+        return items + 1;
+    }
+
+    public static final int LINK_LIST_SIZE = 45;
+
+    private static final DateTimeFormatter MAIL_TIME = DateTimeFormatter.ofPattern("MM-dd HH:mm");
 
     public static final int CONTACT_LIST_SIZE = 45;
 
@@ -397,6 +413,78 @@ public class GuiManager {
         }
     }
 
+    public void openLinkMails(Player player, int page) {
+        List<LinkMail> mails = storage.listLinkMails(player.getUniqueId(), config.getServerId());
+        int pages = Math.max(1, (mails.size() + LINK_LIST_SIZE - 1) / LINK_LIST_SIZE);
+        int current = Math.max(0, Math.min(page, pages - 1));
+        LinkMailListHolder holder = new LinkMailListHolder(player.getUniqueId(), current, mails);
+        Inventory inventory = Bukkit.createInventory(holder, 54,
+                Msg.component("&8链接邮件 &7· &6" + (current + 1) + "/" + pages));
+        holder.setInventory(inventory);
+        renderLinkMails(holder);
+        player.openInventory(inventory);
+    }
+
+    public void renderLinkMails(LinkMailListHolder holder) {
+        Inventory inventory = holder.getInventory();
+        inventory.clear();
+        int pages = Math.max(1, (holder.getMails().size() + LINK_LIST_SIZE - 1) / LINK_LIST_SIZE);
+        int from = holder.getPage() * LINK_LIST_SIZE;
+        for (int i = 0; i < LINK_LIST_SIZE; i++) {
+            int index = from + i;
+            if (index >= holder.getMails().size()) {
+                break;
+            }
+            inventory.setItem(i, linkMailIcon(holder.getMails().get(index)));
+        }
+        if (holder.getMails().isEmpty()) {
+            inventory.setItem(22, button(Material.PAPER, "&7还没有链接邮件",
+                    "&7在「发送邮件」里点「寄一条链接」",
+                    "&7就能把 B 站视频寄给好友"));
+        }
+        if (holder.getPage() > 0) {
+            inventory.setItem(contactSlotPrev(), button(Material.ARROW, "&e上一页"));
+        }
+        inventory.setItem(contactSlotClose(), button(Material.BARRIER, "&c关闭",
+                "&7共 &f" + holder.getMails().size() + " &7封"));
+        if (holder.getPage() < pages - 1) {
+            inventory.setItem(contactSlotNext(), button(Material.ARROW, "&e下一页"));
+        }
+    }
+
+    private ItemStack linkMailIcon(LinkMail mail) {
+        return button(Material.WRITTEN_BOOK, "&b来自 &f" + mail.senderName() + " &b的链接",
+                "&7时间: &f" + formatMailTime(mail.createdAt()),
+                mail.read() ? "&7状态: &8已读" : "&7状态: &a未读",
+                "&7点击查看正文");
+    }
+
+    public void openLinkMailView(Player player, LinkMail mail) {
+        LinkMailViewHolder holder = new LinkMailViewHolder(player.getUniqueId(), mail);
+        Inventory inventory = Bukkit.createInventory(holder, 27, Msg.component("&8链接邮件"));
+        holder.setInventory(inventory);
+        renderLinkMailView(holder);
+        player.openInventory(inventory);
+    }
+
+    public void renderLinkMailView(LinkMailViewHolder holder) {
+        Inventory inventory = holder.getInventory();
+        inventory.clear();
+        LinkMail mail = holder.getMail();
+        inventory.setItem(11, button(Material.WRITTEN_BOOK, "&b来自 &f" + mail.senderName() + " &b的视频",
+                "&7发件人: &f" + mail.senderName(),
+                "&7收到时间: &f" + formatMailTime(mail.createdAt()),
+                "&7链接: &f" + mail.url()));
+        inventory.setItem(15, button(Material.LIME_DYE, "&a打开链接",
+                "&7点这里后，聊天栏会出现可点链接",
+                "&7再点聊天栏那一行才跳浏览器"));
+        inventory.setItem(22, button(Material.BARRIER, "&c关闭"));
+    }
+
+    private String formatMailTime(long millis) {
+        return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(MAIL_TIME);
+    }
+
     public void openSendTo(Player player, UUID target, String targetName) {
         MailSendHolder holder = new MailSendHolder(target, targetName, MAIL_SEND_INPUT);
         Inventory inventory = Bukkit.createInventory(holder, 54,
@@ -413,6 +501,10 @@ public class GuiManager {
         inventory.setItem(49, button(Material.LIME_DYE, "&a确认发送",
                 "&7把上方 36 格内的物品寄给 &f" + holder.getTargetName(),
                 "&7邮件会进入对方的邮箱"));
+        inventory.setItem(51, button(Material.WRITABLE_BOOK, "&d寄一条链接",
+                "&7点一下领一本「链接邮件」书",
+                "&7把 B 站链接写进书里，放回邮寄区",
+                "&7再点「确认发送」就能寄出去"));
         inventory.setItem(53, button(Material.BARRIER, "&c关闭",
                 "&7已放入的物品会退回你的背包"));
     }
