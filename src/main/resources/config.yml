@@ -13,7 +13,7 @@ messages:
   ship-waiting: "&e目标驿站 &f%station% &e塞满啦，包裹 &7#%id% &e正在排队等空位，催催对方清一清收件箱吧！"
   ship-discarded: "&c目标驿站 &f%station% &c塞满超过 &f%hours% &c小时，包裹 &7#%id% &c投不进去，已暂存，快找管理员领取吧！"
   mail-received: "&a邮箱收到新东西啦：&f%amount% &a个 &f%item%"
-  mail-received-from: "&a邮箱收到新东西啦：&f%amount% &a个 &f%item%&a，来自 &f%sender%"
+  mail-received-from: "&a你收到了 &f%sender% &a寄来的邮件"
   mail-sent: "&a已把 &f%amount% &a个 &f%item% &a塞进 &f%target% &a的邮箱啦！"
   item-blocked: " &c本站不收这个！"
   item-blocked-in-send: "&c发货区里有禁运物品 &f%item% &c，本站不收这个！"
