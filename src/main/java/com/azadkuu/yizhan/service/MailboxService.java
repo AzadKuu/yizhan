@@ -101,10 +101,18 @@ public class MailboxService {
                 if (items.isEmpty()) {
                     return;
                 }
-                if (!storage.markDailyClaim(uuid, LocalDate.now().format(DATE_FORMAT))) {
+                String claimDate = LocalDate.now().format(DATE_FORMAT);
+                if (!storage.markDailyClaim(uuid, claimDate)) {
                     return;
                 }
-                int stashed = storage.depositToMailbox(uuid, items, config.getMailboxSize());
+                int stashed;
+                try {
+                    stashed = storage.depositToMailbox(uuid, items, config.getMailboxSize());
+                } catch (RuntimeException ex) {
+                    // 发奖失败就把领取标记撤回，别让玩家白丢一天
+                    storage.rollbackDailyClaim(uuid, claimDate);
+                    throw ex;
+                }
                 if (stashed > 0) {
                     plugin.getLogger().warning("邮箱已满，每日奖励 " + stashed + " 件暂存待领取: " + uuid);
                 }

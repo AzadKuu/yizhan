@@ -1460,25 +1460,35 @@ public class MysqlStorage implements Storage {
     @Override
     public boolean markDailyClaim(UUID player, String date) {
         try (Connection c = conn()) {
+            // 日期一律用数据库的 CURDATE()：多台子服即使时区不同也只看同一个“今天”
             try (PreparedStatement ps = c.prepareStatement("INSERT IGNORE INTO " + prefix
-                    + "daily_claims (player_uuid, claim_date, claimed_at) VALUES (?,?,?)")) {
+                    + "daily_claims (player_uuid, claim_date, claimed_at) VALUES (?,CURDATE(),?)")) {
                 ps.setString(1, player.toString());
-                ps.setString(2, date);
-                ps.setLong(3, System.currentTimeMillis());
+                ps.setLong(2, System.currentTimeMillis());
                 if (ps.executeUpdate() > 0) {
                     return true;
                 }
             }
             try (PreparedStatement ps = c.prepareStatement("UPDATE " + prefix
-                    + "daily_claims SET claim_date=?, claimed_at=? WHERE player_uuid=? AND claim_date<>?")) {
-                ps.setString(1, date);
-                ps.setLong(2, System.currentTimeMillis());
-                ps.setString(3, player.toString());
-                ps.setString(4, date);
+                    + "daily_claims SET claim_date=CURDATE(), claimed_at=? WHERE player_uuid=? AND claim_date<>CURDATE()")) {
+                ps.setLong(1, System.currentTimeMillis());
+                ps.setString(2, player.toString());
                 return ps.executeUpdate() > 0;
             }
         } catch (SQLException ex) {
             throw new StorageException("markDailyClaim failed", ex);
+        }
+    }
+
+    @Override
+    public boolean rollbackDailyClaim(UUID player, String date) {
+        try (Connection c = conn();
+             PreparedStatement ps = c.prepareStatement("DELETE FROM " + prefix
+                     + "daily_claims WHERE player_uuid=? AND claim_date=CURDATE()")) {
+            ps.setString(1, player.toString());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            throw new StorageException("rollbackDailyClaim failed", ex);
         }
     }
 

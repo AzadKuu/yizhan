@@ -101,6 +101,9 @@ public interface Storage extends AutoCloseable {
 
     boolean markDailyClaim(UUID player, String date);
 
+    /** 发奖失败时把当天的领取标记撤回，让玩家还能再领一次。 */
+    boolean rollbackDailyClaim(UUID player, String date);
+
     Map<Integer, ItemStack> loadDailyRewardItems();
 
     void saveDailyRewardItems(Map<Integer, ItemStack> items);

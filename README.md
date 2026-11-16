@@ -129,7 +129,7 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 1. 玩家对准方块执行 `/yizhan mailbox bind`，把这个方块设为自己在该子服的邮箱方块（每台子服需各自绑定）
 2. 右键该方块，打开的是**自己的**邮箱（45 格）
 3. 邮箱内容按玩家 UUID 存库，因此所有子服共用同一份数据 —— 在 A 服收到的邮件，到 B 服打开同样能看到
-4. 关闭界面时自动保存
+4. 关闭界面时异步保存；保存落地前再次右键会提示「邮箱正在保存」，防止读到旧数据后重复取件
 
 投递到邮箱的途径有三种：`/yizhan mail send`、`/yizhan mail give`、每日奖励。
 
@@ -138,6 +138,8 @@ export JAVA_HOME=/path/to/jdk-21 && mvn -B -DskipTests package
 - **代绑**：`/yizhan mailbox bind <玩家>` —— 管理员对准方块执行，就把这个方块绑成**该玩家**在该子服的邮箱；`unbind` / `info` 同样支持带玩家名。玩家在线时会收到一条提示。
 - **公共邮箱**：`/yizhan mailbox public bind` —— 管理员对准方块执行，把这个方块设为本服的公共邮箱方块；此后**任何有 `yizhan.mail` 权限的玩家右键它都会打开自己的邮箱**，不用各自绑定。适合放在出生点、驿站旁。`public unbind` / `public info` 用于解除与查看。
 - 公共邮箱每台子服只能设一个（存 `yz_mailbox_blocks` 表，主键 `server_id`），所以要在每台子服分别设置。
+- **方块校验**：绑定只接受容器类方块，默认 `CHEST` / `TRAPPED_CHEST` / `BARREL` / 任意潜影盒（`mailbox.allowed-blocks` 可改）；驿站方块、公共邮箱方块、以及**别人已经绑过的方块**都会被拒绝，避免把别人的箱子占成自己的邮箱。
+- **同一个方块，各看各的**：多个玩家（含别人绑定的方块）右键同一个邮箱方块时，打开的都是**自己**的邮箱，看到的东西互不相干。
 - 代绑按玩家 UUID 写入（与玩家自己绑定完全等价），玩家离线也能操作；找不到该玩家名字时会直接报错。
 
 ### 通讯录 / 邮箱内寄件
@@ -256,6 +258,16 @@ shipment:
 > 升级提示：服务器上**已存在**的 `config.yml` 不会自动补齐新增配置段（代码有内置默认值，运行不受影响）。如需调整 `mailbox`、`daily-reward`、`ship-fee`，请手动把对应段落补进配置文件，然后 `/yizhan reload`。
 
 **消息占位符**：`ship-start` 支持 `%id%`、`%to%`、`%buffer%`；`ship-arrived` 支持 `%id%`、`%station%`；`ship-waiting` 支持 `%id%`、`%station%`；`ship-discarded` 支持 `%id%`、`%station%`、`%hours%`。所有模板都支持 `&` 颜色代码。
+
+### 邮箱方块白名单
+
+```yaml
+mailbox:
+  size: 45
+  # 允许被 /yizhan mailbox bind 绑定的方块（大写 Material 名）
+  # SHULKER_BOX 代表所有颜色的潜影盒
+  allowed-blocks: CHEST,TRAPPED_CHEST,BARREL,SHULKER_BOX
+```
 
 ## 物品过滤
 

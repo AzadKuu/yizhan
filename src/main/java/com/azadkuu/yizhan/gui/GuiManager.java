@@ -31,8 +31,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class GuiManager {
 
@@ -54,6 +56,8 @@ public class GuiManager {
     private final Map<UUID, StationHolder> open = new HashMap<>();
     private final Map<UUID, MailboxHolder> openMailboxes = new HashMap<>();
     private final Map<UUID, DiscardedHolder> openDiscarded = new HashMap<>();
+    /** 正在异步保存邮箱的玩家：保存落地前不允许重开，避免读到旧数据再领一次。 */
+    private final Set<UUID> mailboxSaving = ConcurrentHashMap.newKeySet();
 
     public GuiManager(PluginConfig config, Storage storage, TransportService transport, ItemFilter filter) {
         this.config = config;
@@ -231,8 +235,24 @@ public class GuiManager {
         openMailboxes.remove(uuid);
     }
 
+    public void beginMailboxSave(UUID uuid) {
+        mailboxSaving.add(uuid);
+    }
+
+    public void endMailboxSave(UUID uuid) {
+        mailboxSaving.remove(uuid);
+    }
+
+    public boolean isMailboxSaving(UUID uuid) {
+        return mailboxSaving.contains(uuid);
+    }
+
     public void openMailbox(Player player) {
         UUID uuid = player.getUniqueId();
+        if (isMailboxSaving(uuid)) {
+            Msg.send(player, config.getPrefix(), "&7邮箱正在保存，稍等一下再打开～");
+            return;
+        }
         int items = config.getMailboxSize();
         MailboxHolder holder = new MailboxHolder(uuid);
         Inventory inventory = Bukkit.createInventory(holder, items + 9,

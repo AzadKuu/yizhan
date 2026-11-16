@@ -14,6 +14,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.event.player.PlayerInteractEvent;
 
 import java.util.ArrayList;
@@ -31,6 +32,11 @@ public class InteractListener implements Listener {
     private final Map<String, String> protectedKeys = new HashMap<>();
     private long protectedKeysAt = 0L;
     private static final long PROTECTED_KEYS_TTL_MS = 5000L;
+    /** 同一次快照里的附带数据，避免每次右键都查库。 */
+    private final Map<String, List<UUID>> ownerCache = new HashMap<>();
+    private final Map<String, Station> stationCache = new HashMap<>();
+    private final Map<UUID, MailboxBlock> ownMailboxCache = new HashMap<>();
+    private String publicMailboxKey = null;
 
     public InteractListener(PluginConfig config, Storage storage, GuiManager guiManager) {
         this.config = config;
@@ -50,8 +56,8 @@ public class InteractListener implements Listener {
         return block.getWorld().getName() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
     }
 
-    /** 刷新受保护方块坐标（本服邮箱 + 本服驿站），5 秒缓存，避免每次挖掘都查库。 */
-    private void refreshProtectedKeys() {
+    /** 每 5 秒刷一次快照（邮箱坐标、驿站、公共邮箱、各玩家自己的邮箱），命中都是内存查表。 */
+    private void refreshSnapshot() {
         long now = System.currentTimeMillis();
         if (now - protectedKeysAt <= PROTECTED_KEYS_TTL_MS) {
             return;
@@ -62,14 +68,25 @@ public class InteractListener implements Listener {
             for (String mailboxKey : storage.listMailboxKeys(config.getServerId())) {
                 fresh.put(mailboxKey, "邮箱方块");
             }
+            Map<String, Station> stations = new HashMap<>();
             for (Station station : storage.listStations()) {
                 if (!config.getServerId().equals(station.getServerId())) {
                     continue;
                 }
-                fresh.put(station.getWorld() + ":" + station.getX() + ":" + station.getY() + ":" + station.getZ(), "驿站方块");
+                String stationKey = station.getWorld() + ":" + station.getX() + ":" + station.getY() + ":" + station.getZ();
+                fresh.put(stationKey, "驿站方块");
+                stations.put(stationKey, station);
             }
+            MailboxBlock publicBlock = storage.getPublicMailboxBlock(config.getServerId());
+            String publicKey = publicBlock == null ? null
+                    : publicBlock.world() + ":" + publicBlock.x() + ":" + publicBlock.y() + ":" + publicBlock.z();
             protectedKeys.clear();
             protectedKeys.putAll(fresh);
+            stationCache.clear();
+            stationCache.putAll(stations);
+            publicMailboxKey = publicKey;
+            ownerCache.clear();
+            ownMailboxCache.clear();
         } catch (RuntimeException ex) {
             protectedKeysAt = 0L;
         }
@@ -83,7 +100,7 @@ public class InteractListener implements Listener {
             return;
         }
         Block block = event.getBlock();
-        refreshProtectedKeys();
+        refreshSnapshot();
         String label = protectedKeys.get(key(block));
         if (label == null) {
             return;
@@ -102,13 +119,23 @@ public class InteractListener implements Listener {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
             return;
         }
+        if (event.getHand() == EquipmentSlot.OFF_HAND) {
+            // 主手和副手会各触发一次，只处理一次，顺便把查库次数砍半
+            return;
+        }
         Block block = event.getClickedBlock();
         if (block == null) {
             return;
         }
         Player player = event.getPlayer();
-        if (isMailboxBlock(storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId()), block)
-                || isMailboxBlock(storage.getPublicMailboxBlock(config.getServerId()), block)) {
+        refreshSnapshot();
+        String blockKey = key(block);
+        MailboxBlock own = ownMailboxCache.get(player.getUniqueId());
+        if (own == null && !ownMailboxCache.containsKey(player.getUniqueId())) {
+            own = storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId());
+            ownMailboxCache.put(player.getUniqueId(), own);
+        }
+        if (isMailboxBlock(own, block) || blockKey.equals(publicMailboxKey)) {
             event.setCancelled(true);
             if (!player.hasPermission("yizhan.mail")) {
                 Msg.send(player, config.getPrefix(), "&c你没有开邮箱的权限哦！");
@@ -117,8 +144,17 @@ public class InteractListener implements Listener {
             guiManager.openMailbox(player);
             return;
         }
-        List<UUID> mailboxOwners = storage.findMailboxOwners(config.getServerId(), block.getWorld().getName(),
-                block.getX(), block.getY(), block.getZ());
+        List<UUID> mailboxOwners = ownerCache.get(blockKey);
+        if (mailboxOwners == null) {
+            if (!protectedKeys.containsKey(blockKey)) {
+                // 不是任何人的邮箱/驿站：完全不用查库
+                mailboxOwners = List.of();
+            } else {
+                mailboxOwners = storage.findMailboxOwners(config.getServerId(), block.getWorld().getName(),
+                        block.getX(), block.getY(), block.getZ());
+            }
+            ownerCache.put(blockKey, mailboxOwners);
+        }
         if (!mailboxOwners.isEmpty()) {
             event.setCancelled(true);
             if (!player.hasPermission("yizhan.mail")) {
@@ -150,16 +186,14 @@ public class InteractListener implements Listener {
                         "&7" + String.join("、", known) + " 已经在你的通讯录里了");
             }
             // 方块是共用的，但打开的是「你自己」的邮箱：同一个方块，每人看到的是各自的邮件
-            if (storage.getPlayerMailboxBlock(player.getUniqueId(), config.getServerId()) == null) {
+            if (own == null) {
                 Msg.send(player, config.getPrefix(),
                         "&7你还没绑定自己的邮箱方块，可以对着自己的方块用 &f/yz mailbox bind");
             }
             guiManager.openMailbox(player);
             return;
         }
-
-        Station station = storage.getStationAt(config.getServerId(), block.getWorld().getName(),
-                block.getX(), block.getY(), block.getZ());
+        Station station = stationCache.get(blockKey);
         if (station == null) {
             return;
         }

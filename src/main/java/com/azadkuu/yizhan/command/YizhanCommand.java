@@ -344,6 +344,46 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                 + " &a的快递费已设为 &f" + (fee > 0 ? fee + " " + config.getCurrencyName() : "无"));
     }
 
+    /** 返回 null 表示这块方块可以绑；否则返回给玩家看的拒绝原因。 */
+    private String mailboxBindProblem(Block block, UUID target) {
+        String type = block.getType().name();
+        List<String> allowed = config.getMailboxAllowedBlocks();
+        boolean typeOk = false;
+        for (String candidate : allowed) {
+            if (candidate.equalsIgnoreCase(type)
+                    || ("SHULKER_BOX".equalsIgnoreCase(candidate) && type.endsWith("_SHULKER_BOX"))) {
+                typeOk = true;
+                break;
+            }
+        }
+        if (!typeOk) {
+            return "&c这块方块不能当邮箱用，请用 &f" + String.join(" / ", allowed) + " &c之类的容器方块";
+        }
+        String world = block.getWorld().getName();
+        int x = block.getX();
+        int y = block.getY();
+        int z = block.getZ();
+        if (storage.getStationAt(config.getServerId(), world, x, y, z) != null) {
+            return "&c这块是驿站方块，不能当邮箱用";
+        }
+        MailboxBlock publicBlock = storage.getPublicMailboxBlock(config.getServerId());
+        if (publicBlock != null && publicBlock.world().equals(world)
+                && publicBlock.x() == x && publicBlock.y() == y && publicBlock.z() == z) {
+            return "&c这块是本服公共邮箱方块，不能占成私人邮箱";
+        }
+        for (UUID owner : storage.findMailboxOwners(config.getServerId(), world, x, y, z)) {
+            if (owner.equals(target)) {
+                continue;
+            }
+            String name = Bukkit.getOfflinePlayer(owner).getName();
+            if (name == null || name.isBlank()) {
+                name = owner.toString().substring(0, 8);
+            }
+            return "&c这块方块已经是 &f" + name + " &c的邮箱了，换一块吧";
+        }
+        return null;
+    }
+
     private void mailbox(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
@@ -385,6 +425,11 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
                 Block block = player.getTargetBlockExact(6);
                 if (block == null) {
                     Msg.send(sender, config.getPrefix(), "&c请把准星对准一个方块（6 格以内）");
+                    return;
+                }
+                String problem = mailboxBindProblem(block, target);
+                if (problem != null) {
+                    Msg.send(sender, config.getPrefix(), problem);
                     return;
                 }
                 storage.savePlayerMailboxBlock(target, config.getServerId(),

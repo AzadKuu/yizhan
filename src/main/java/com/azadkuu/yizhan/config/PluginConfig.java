@@ -70,6 +70,8 @@ public class PluginConfig {
     private long dbConnectionTimeoutMs;
 
     private int mailboxSize;
+    /** 允许被绑定成邮箱的方块类型（大写 Material 名，SHULKER_BOX 通配全部潜影盒）。 */
+    private List<String> mailboxAllowedBlocks = new ArrayList<>();
     private boolean linkMailEnabled;
     private List<String> linkWhitelist = new ArrayList<>();
     private int linkMailMaxLength;
@@ -201,6 +203,13 @@ public class PluginConfig {
         }
 
         this.mailboxSize = clampSize(cfg.getInt("mailbox.size", 45));
+        this.mailboxAllowedBlocks = new ArrayList<>();
+        for (String raw : splitList(cfg.getString("mailbox.allowed-blocks",
+                "CHEST,TRAPPED_CHEST,BARREL,SHULKER_BOX"))) {
+            if (!raw.isBlank()) {
+                mailboxAllowedBlocks.add(raw.toUpperCase(java.util.Locale.ROOT));
+            }
+        }
         this.linkMailEnabled = cfg.getBoolean("mail-link.enabled", true);
         this.linkWhitelist = splitList(cfg.getString("mail-link.whitelist", "bilibili.com,b23.tv,bili2233.cn"));
         this.linkMailMaxLength = Math.max(16, cfg.getInt("mail-link.max-length", 512));
@@ -406,6 +415,10 @@ public class PluginConfig {
 
     public int getMailboxSize() {
         return mailboxSize;
+    }
+
+    public List<String> getMailboxAllowedBlocks() {
+        return mailboxAllowedBlocks;
     }
 
     public boolean isLinkMailEnabled() {

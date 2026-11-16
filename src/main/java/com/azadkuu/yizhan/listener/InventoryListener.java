@@ -66,10 +66,23 @@ public class InventoryListener implements Listener {
         this.guiManager = guiManager;
     }
 
+    /** 这些 GUI 的点击全部由插件接管，双击收集必须先拦。 */
+    private static boolean isManagedHolder(Object holder) {
+        return holder instanceof MailboxHolder || holder instanceof StationHolder
+                || holder instanceof MailSendHolder || holder instanceof ContactsHolder
+                || holder instanceof DiscardedHolder || holder instanceof LinkMailListHolder
+                || holder instanceof LinkMailViewHolder;
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onClick(InventoryClickEvent event) {
         Inventory top = event.getView().getTopInventory();
         Player player = (Player) event.getWhoClicked();
+        // 双击「收集到鼠标」会绕过逐件过滤与槽位限制，统一拦掉
+        if (event.getAction() == InventoryAction.COLLECT_TO_CURSOR && isManagedHolder(top.getHolder())) {
+            event.setCancelled(true);
+            return;
+        }
         if (top.getHolder() instanceof MailboxHolder mailbox) {
             handleMailboxClick(event, player, top, mailbox);
             return;
@@ -243,11 +256,19 @@ public class InventoryListener implements Listener {
         if (item == null || item.getType().isAir()) {
             return;
         }
+        boolean claimed;
         try {
-            storage.claimDiscardedItem(id);
+            claimed = storage.claimDiscardedItem(id);
         } catch (RuntimeException ex) {
             plugin.getLogger().warning("claim discarded item " + id + " failed: " + ex.getMessage());
             Msg.send(player, config.getPrefix(), config.getClaimFailedMessage());
+            return;
+        }
+        if (!claimed) {
+            // 别人已经领走了：不能凭旧快照再发一份
+            Msg.send(player, config.getPrefix(), "&c这件东西已经被别人领走啦，刷新一下看看");
+            guiManager.renderDiscarded(holder);
+            player.updateInventory();
             return;
         }
         giveOrDrop(player, item.clone());
@@ -1138,12 +1159,26 @@ public class InventoryListener implements Listener {
         Set<Integer> clearSlots = new TreeSet<>(holder.getOriginalSlots());
         clearSlots.removeAll(snapshot.keySet());
         holder.setOriginalSlots(snapshot.keySet());
+        // 保存期间禁止重新打开邮箱，否则会读到还没落库的旧数据再领一次
+        guiManager.beginMailboxSave(owner);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            boolean ok = true;
             try {
                 storage.saveMailboxItems(owner, snapshot, clearSlots);
             } catch (RuntimeException ex) {
+                ok = false;
                 plugin.getLogger().warning("保存邮箱失败: " + ex.getMessage());
             }
+            final boolean saved = ok;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                guiManager.endMailboxSave(owner);
+                if (!saved) {
+                    Player online = Bukkit.getPlayer(owner);
+                    if (online != null && online.isOnline()) {
+                        Msg.send(online, config.getPrefix(), config.getSaveFailedMessage());
+                    }
+                }
+            });
         });
     }
 
