@@ -60,8 +60,14 @@ public final class YizhanPlugin extends JavaPlugin {
             pluginCommand.setExecutor(command);
             pluginCommand.setTabCompleter(command);
         }
+        PluginCommand videoCommand = getCommand("video");
+        if (videoCommand != null) {
+            videoCommand.setExecutor(new com.azadkuu.yizhan.command.VideoCommand(command));
+        }
 
         getServer().getPluginManager().registerEvents(new InteractListener(config, storage, guiManager), this);
+        getServer().getPluginManager().registerEvents(
+                new com.azadkuu.yizhan.listener.VideoCardListener(this, config, storage), this);
         getServer().getPluginManager().registerEvents(
                 new InventoryListener(this, config, storage, itemFilter, transport, notificationService, guiManager), this);
         getServer().getPluginManager().registerEvents(

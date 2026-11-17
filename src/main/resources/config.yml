@@ -78,6 +78,10 @@ mail-link:
   max-length: 512                  # 单条链接最长字符数
   max-per-day: 20                  # 每人每天最多寄多少条链接邮件
   received-from: "&a你收到了一条来自 &f%sender% &a的视频链接 &7（在邮箱「链接邮件」里查看）"
+video-card:
+  enabled: true                    # 一次性视频卡（右键打开后消失，不能拿来当装饰）
+  max-per-hour: 30                 # 每人每小时最多做多少张
+  received-from: "&a%player% 给你塞了一张视频卡 &7（一次性，右键打开）"
 mailbox:
   size: 45                       # 每个玩家独立邮箱的容量（9-45，会向上取整到整行）
 daily-reward:

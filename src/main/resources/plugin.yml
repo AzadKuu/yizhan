@@ -9,6 +9,10 @@ commands:
     description: Yizhan main command
     usage: /yizhan help
     aliases: [yz, yizhanstation]
+  video:
+    description: Make a one-time video card (or send one to another player)
+    usage: /video [player] <url>
+    aliases: [v]
 permissions:
   yizhan.bind:
     description: Bind or unbind stations
@@ -28,3 +32,6 @@ permissions:
   yizhan.admin:
     description: Reload and administrative actions
     default: op
+  yizhan.video:
+    description: Make one-time video cards and send them to other players
+    default: true

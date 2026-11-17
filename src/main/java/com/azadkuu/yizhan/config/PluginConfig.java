@@ -77,6 +77,9 @@ public class PluginConfig {
     private int linkMailMaxLength;
     private int linkMailMaxPerDay;
     private String linkMailReceivedFromMessage;
+    private boolean videoCardEnabled;
+    private int videoCardMaxPerHour;
+    private String videoCardReceivedFromMessage;
     private boolean dailyRewardEnabled;
     private String dailyRewardMessage;
     private final List<DailyRewardItem> dailyRewardItems = new ArrayList<>();
@@ -216,6 +219,10 @@ public class PluginConfig {
         this.linkMailMaxPerDay = Math.max(1, cfg.getInt("mail-link.max-per-day", 20));
         this.linkMailReceivedFromMessage = cfg.getString("mail-link.received-from",
                 "&a你收到了一条来自 &f%sender% &a的视频链接 &7（在邮箱「链接邮件」里查看）");
+        this.videoCardEnabled = cfg.getBoolean("video-card.enabled", true);
+        this.videoCardMaxPerHour = Math.max(1, cfg.getInt("video-card.max-per-hour", 30));
+        this.videoCardReceivedFromMessage = cfg.getString("video-card.received-from",
+                "&a%player% 给你塞了一张视频卡 &7（一次性，右键打开）");
         this.dailyRewardEnabled = cfg.getBoolean("daily-reward.enabled", false);
         this.dailyRewardMessage = cfg.getString("daily-reward.message", "&a每日奖励已发放到你的邮箱");
         dailyRewardItems.clear();
@@ -439,6 +446,18 @@ public class PluginConfig {
 
     public int getLinkMailMaxPerDay() {
         return linkMailMaxPerDay;
+    }
+
+    public boolean isVideoCardEnabled() {
+        return videoCardEnabled;
+    }
+
+    public int getVideoCardMaxPerHour() {
+        return videoCardMaxPerHour;
+    }
+
+    public String getVideoCardReceivedFromMessage() {
+        return videoCardReceivedFromMessage;
     }
 
     /** 逗号 / 空格分隔的字符串拆成列表。 */

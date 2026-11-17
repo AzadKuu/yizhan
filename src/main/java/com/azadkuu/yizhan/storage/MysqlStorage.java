@@ -224,6 +224,19 @@ public class MysqlStorage implements Storage {
                         + "KEY idx_link_mails (recipient_uuid, server_id)"
                         + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 
+                "CREATE TABLE IF NOT EXISTS " + prefix + "video_cards ("
+                        + "id BIGINT NOT NULL AUTO_INCREMENT,"
+                        + "owner_uuid VARCHAR(36) NOT NULL,"
+                        + "server_id VARCHAR(64) NOT NULL,"
+                        + "url VARCHAR(1024) NOT NULL,"
+                        + "title VARCHAR(128) NOT NULL,"
+                        + "created_at BIGINT NOT NULL,"
+                        + "used_at BIGINT NULL,"
+                        + "used_by VARCHAR(36) NULL,"
+                        + "PRIMARY KEY (id),"
+                        + "KEY idx_video_cards (owner_uuid, created_at)"
+                        + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
                 "CREATE TABLE IF NOT EXISTS " + prefix + "item_templates ("
                         + "code VARCHAR(64) NOT NULL,"
                         + "item_data LONGBLOB NOT NULL,"
@@ -1800,6 +1813,68 @@ public class MysqlStorage implements Storage {
             }
         } catch (SQLException ex) {
             throw new StorageException("countLinkMailsSince failed", ex);
+        }
+    }
+
+    @Override
+    public long createVideoCard(UUID owner, String serverId, String url, String title) {
+        String sql = "INSERT INTO " + prefix + "video_cards "
+                + "(owner_uuid, server_id, url, title, created_at) VALUES (?,?,?,?,?)";
+        try (Connection c = conn();
+             PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, owner.toString());
+            ps.setString(2, serverId);
+            ps.setString(3, url);
+            ps.setString(4, title == null ? "" : title);
+            ps.setLong(5, System.currentTimeMillis());
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+            throw new StorageException("createVideoCard returned no key");
+        } catch (SQLException ex) {
+            throw new StorageException("createVideoCard failed", ex);
+        }
+    }
+
+    @Override
+    public String takeVideoCard(long id, UUID user) {
+        String update = "UPDATE " + prefix + "video_cards SET used_at=?, used_by=? "
+                + "WHERE id=? AND used_at IS NULL";
+        try (Connection c = conn()) {
+            try (PreparedStatement ps = c.prepareStatement(update)) {
+                ps.setLong(1, System.currentTimeMillis());
+                ps.setString(2, user.toString());
+                ps.setLong(3, id);
+                if (ps.executeUpdate() == 0) {
+                    return null;
+                }
+            }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT url FROM " + prefix + "video_cards WHERE id=?")) {
+                ps.setLong(1, id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? rs.getString(1) : null;
+                }
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("takeVideoCard failed", ex);
+        }
+    }
+
+    @Override
+    public int countVideoCardsSince(UUID owner, long since) {
+        String sql = "SELECT COUNT(*) FROM " + prefix + "video_cards WHERE owner_uuid=? AND created_at>=?";
+        try (Connection c = conn(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, owner.toString());
+            ps.setLong(2, since);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        } catch (SQLException ex) {
+            throw new StorageException("countVideoCardsSince failed", ex);
         }
     }
 

@@ -13,6 +13,8 @@ import com.azadkuu.yizhan.service.MailboxService;
 import com.azadkuu.yizhan.service.TransportService;
 import com.azadkuu.yizhan.storage.Storage;
 import com.azadkuu.yizhan.util.Msg;
+import com.azadkuu.yizhan.util.VideoCardTitles;
+import com.azadkuu.yizhan.util.VideoCards;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
@@ -41,6 +43,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUB_COMMANDS = Arrays.asList(
             "bind", "unbind", "setname", "route", "fee", "buffer", "open", "list", "info", "mail", "mailbox", "dailyreward",
+            "video",
             "reload", "debugitem", "debugpdc", "help");
 
     private final YizhanPlugin plugin;
@@ -80,6 +83,7 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             case "info" -> info(sender, args);
             case "mail" -> mail(sender, args);
             case "mailbox" -> mailbox(sender, args);
+            case "video" -> video(sender, args);
             case "dailyreward" -> dailyReward(sender, args);
             case "item" -> item(sender, args);
             case "discarded" -> discarded(sender);
@@ -671,6 +675,86 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
         return sb.toString();
     }
 
+    /**
+     * /video [玩家] <链接>：做一张一次性视频卡。
+     * 不写玩家就给自己；写玩家就静默塞进对方邮箱。
+     */
+    public boolean video(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            Msg.send(sender, config.getPrefix(), config.getPlayerOnlyMessage());
+            return true;
+        }
+        if (!config.isVideoCardEnabled()) {
+            Msg.send(sender, config.getPrefix(), "&7视频卡功能已关闭");
+            return true;
+        }
+        if (!player.hasPermission("yizhan.video")) {
+            Msg.send(sender, config.getPrefix(), config.getNoPermissionMessage());
+            return true;
+        }
+        if (args.length < 1 || args.length > 2) {
+            Msg.send(sender, config.getPrefix(), "&7用法: &f/video <链接> &7自己做一张，或 &f/video <玩家> <链接> &7塞给对方");
+            return true;
+        }
+        String targetName = args.length == 2 ? args[0] : null;
+        String rawUrl = args.length == 2 ? args[1] : args[0];
+        String url = plugin.getLinkGuard().firstAllowedUrl(rawUrl);
+        if (url == null) {
+            Msg.send(sender, config.getPrefix(), "&c这个链接不在白名单里（只认 B 站：bilibili.com / b23.tv / bili2233.cn）");
+            return true;
+        }
+        UUID targetId = player.getUniqueId();
+        if (targetName != null) {
+            UUID resolved = resolveUuid(targetName);
+            if (resolved == null) {
+                Msg.send(sender, config.getPrefix(), config.getPlayerNotFoundMessage().replace("%player%", targetName));
+                return true;
+            }
+            targetId = resolved;
+        }
+        UUID finalTarget = targetId;
+        long since = System.currentTimeMillis() - 3600_000L;
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                int made = storage.countVideoCardsSince(player.getUniqueId(), since);
+                if (made >= config.getVideoCardMaxPerHour()) {
+                    Bukkit.getScheduler().runTask(plugin, () -> Msg.send(player, config.getPrefix(),
+                            "&7一小时最多做 " + config.getVideoCardMaxPerHour() + " 张视频卡，歇会儿吧～"));
+                    return;
+                }
+                String title = VideoCardTitles.fetch(url);
+                String finalTitle = title == null || title.isBlank() ? "视频链接" : title;
+                long cardId = storage.createVideoCard(finalTarget, config.getServerId(), url, finalTitle);
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> deliverVideoCard(player, finalTarget, cardId, finalTitle, url));
+            } catch (RuntimeException ex) {
+                plugin.getLogger().warning("视频卡生成失败: " + ex.getMessage());
+                Bukkit.getScheduler().runTask(plugin, () -> Msg.send(player, config.getPrefix(),
+                        "&c视频卡生成失败：" + ex.getMessage()));
+            }
+        });
+        return true;
+    }
+
+    private void deliverVideoCard(Player sender, UUID targetId, long cardId, String title, String url) {
+        if (!sender.isOnline()) {
+            return;
+        }
+        ItemStack card = VideoCards.create(plugin, cardId, title);
+        if (targetId.equals(sender.getUniqueId())) {
+            Map<Integer, ItemStack> left = sender.getInventory().addItem(card);
+            left.values().forEach(rest -> sender.getWorld().dropItemNaturally(sender.getLocation(), rest));
+            Msg.send(sender, config.getPrefix(), "&a做好了一张视频卡 &7· &f" + title
+                    + " &7（右键打开，用一次就没了）");
+            return;
+        }
+        String targetName = Bukkit.getOfflinePlayer(targetId).getName();
+        mailboxService.deliver(targetId, List.of(card),
+                config.getVideoCardReceivedFromMessage().replace("%player%", sender.getName()));
+        Msg.send(sender, config.getPrefix(), "&a视频卡已经塞进 &f"
+                + (targetName == null ? "对方" : targetName) + " &a的邮箱了");
+    }
+
     private void mail(CommandSender sender, String[] args) {
         if (args.length < 2) {
             Msg.send(sender, config.getPrefix(), "&7用法: &f/yz mail send <玩家> [数量] &7把主手物品发到对方邮箱");
@@ -1250,6 +1334,9 @@ public class YizhanCommand implements CommandExecutor, TabCompleter {
             }
             if (sub.equals("dailyreward")) {
                 return filtered(Arrays.asList("add", "list", "remove", "clear"), args[1]);
+            }
+            if (sub.equals("video")) {
+                return onlineNames(args[1]);
             }
         }
         if (args.length == 3) {

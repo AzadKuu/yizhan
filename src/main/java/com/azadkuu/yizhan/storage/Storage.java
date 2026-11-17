@@ -141,6 +141,18 @@ public interface Storage extends AutoCloseable {
     /** 该玩家本服在 since 之后发出去的链接邮件数量，用于限流。 */
     int countLinkMailsSince(UUID sender, String serverId, long since);
 
+    /** 建一张一次性视频卡，返回自增 id（id 就是物品里存的凭据）。 */
+    long createVideoCard(UUID owner, String serverId, String url, String title);
+
+    /**
+     * 原子地作废一张视频卡：成功返回它的 URL，失败（不存在 / 已被用过）返回 null。
+     * 复制出来的同 id 卡片只有第一张能用。
+     */
+    String takeVideoCard(long id, UUID user);
+
+    /** 该玩家在 since 之后做了多少张视频卡，用于限流。 */
+    int countVideoCardsSince(UUID owner, long since);
+
     void saveItemTemplate(String code, ItemStack item);
 
     ItemStack getItemTemplate(String code);
