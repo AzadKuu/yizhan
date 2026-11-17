@@ -185,12 +185,12 @@ public class InteractListener implements Listener {
                 Msg.send(player, config.getPrefix(),
                         "&7" + String.join("、", known) + " 已经在你的通讯录里了");
             }
-            // 方块是共用的，但打开的是「你自己」的邮箱：同一个方块，每人看到的是各自的邮件
+            // 邮箱是各自独立的：别人的方块只用来加通讯录，不打开界面
+            // （要开邮箱请右键自己绑定的方块，或本服公共邮箱方块）
             if (own == null) {
                 Msg.send(player, config.getPrefix(),
-                        "&7你还没绑定自己的邮箱方块，可以对着自己的方块用 &f/yz mailbox bind");
+                        "&7你还没绑定自己的邮箱方块，对准自己的方块用 &f/yz mailbox bind &7就能收邮件啦");
             }
-            guiManager.openMailbox(player);
             return;
         }
         Station station = stationCache.get(blockKey);
